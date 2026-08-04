@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vostud AI - Platform Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-size: 0.9em;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 5px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-danger {
+            background: rgba(248, 113, 113, 0.2);
+            color: #f87171;
+            border: 1px solid rgba(248, 113, 113, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: rgba(248, 113, 113, 0.3);
+        }
+
+        .btn-success {
+            background: rgba(74, 222, 128, 0.2);
+            color: #4ade80;
+            border: 1px solid rgba(74, 222, 128, 0.3);
+        }
+
+        .btn-success:hover {
+            background: rgba(74, 222, 128, 0.3);
+        }
+
+        /* Login/Register */
+        .auth-container {
+            max-width: 400px;
+            margin: 100px auto;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 40px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .auth-container h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 1.8em;
+        }
+
+        .auth-container input {
+            width: 100%;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 1em;
+        }
+
+        .auth-container input::placeholder {
+            color: #666;
+        }
+
+        .auth-container input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .auth-container .btn {
+            width: 100%;
+            padding: 12px;
+            font-size: 1em;
+        }
+
+        .auth-container .switch-link {
+            text-align: center;
+            margin-top: 15px;
+            color: #aaa;
+            cursor: pointer;
+        }
+
+        .auth-container .switch-link:hover {
+            color: #667eea;
+        }
+
+        .auth-container .error-msg {
+            color: #f87171;
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(248, 113, 113, 0.1);
+            border-radius: 8px;
+            display: none;
+        }
+
+        /* Dashboard */
+        .dashboard {
+            display: none;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            text-align: center;
+        }
+
+        .stat-card .number {
+            font-size: 2.5em;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-card .label {
+            color: #aaa;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        /* Card */
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .card h3 {
+            margin-bottom: 15px;
+            color: #ddd;
+        }
+
+        /* API Key Display */
+        .api-key-display {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+
+        .api-key-display .key-text {
+            font-family: 'Courier New', monospace;
+            font-size: 1.1em;
+            flex: 1;
+            word-break: break-all;
+            color: #4ade80;
+        }
+
+        .api-key-display .copy-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            padding: 5px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .api-key-display .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Keys Table */
+        .keys-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .keys-table th,
+        .keys-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .keys-table th {
+            color: #888;
+            font-weight: 600;
+            font-size: 0.85em;
+            text-transform: uppercase;
+        }
+
+        .keys-table tr:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .status-active {
+            color: #4ade80;
+        }
+        .status-expired {
+            color: #f87171;
+        }
+        .status-revoked {
+            color: #fbbf24;
+        }
+
+        /* Model Selector */
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .model-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .model-item:hover {
+            border-color: rgba(102, 126, 234, 0.5);
+        }
+
+        .model-item.active {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .model-item .model-name {
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        .model-item .model-api {
+            color: #888;
+            font-size: 0.8em;
+        }
+
+        .model-item .model-status {
+            font-size: 0.75em;
+            margin-top: 5px;
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 10px;
+        }
+
+        .model-status.working {
+            background: rgba(74, 222, 128, 0.2);
+            color: #4ade80;
+        }
+
+        .model-status.failed {
+            background: rgba(248, 113, 113, 0.2);
+            color: #f87171;
+        }
+
+        .model-status.untested {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+        }
+
+        /* Upload Section */
+        .upload-area {
+            border: 2px dashed rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            text-align: center;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .upload-area:hover {
+            border-color: rgba(102, 126, 234, 0.5);
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        /* Chat Section */
+        .chat-box {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .chat-box .user-msg {
+            color: #667eea;
+        }
+
+        .chat-box .bot-msg {
+            color: #4ade80;
+        }
+
+        .chat-input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-group input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+        }
+
+        .chat-input-group input::placeholder {
+            color: #666;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 10px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background 0.3s;
+            background: transparent;
+            border: none;
+            color: #aaa;
+            font-weight: 500;
+        }
+
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tab.active {
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Toast / Notification */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            padding: 15px 25px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.9);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: none;
+            z-index: 1000;
+            max-width: 400px;
+            backdrop-filter: blur(10px);
+        }
+
+        .toast.show {
+            display: block;
+            animation: slideUp 0.3s ease;
+        }
+
+        .toast.success {
+            border-color: rgba(74, 222, 128, 0.3);
+        }
+
+        .toast.error {
+            border-color: rgba(248, 113, 113, 0.3);
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .header-actions {
+                width: 100%;
+            }
+            .header-actions .btn {
+                flex: 1;
+                text-align: center;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .keys-table {
+                font-size: 0.8em;
+            }
+            .keys-table th,
+            .keys-table td {
+                padding: 8px 10px;
+            }
+            .auth-container {
+                margin: 50px 20px;
+                padding: 30px 20px;
+            }
+            .api-key-display {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .tabs {
+                flex-direction: column;
+            }
+            .tab {
+                text-align: center;
+            }
+        }
+
+        /* Loading spinner */
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-text {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            color: #888;
+        }
+
+        .loading-text.active {
+            display: flex;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: #1a1a2e;
+            padding: 30px;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .modal h2 {
+            margin-bottom: 20px;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+        }
+
+        .modal .btn {
+            margin-right: 10px;
+        }
+
+        .modal .modal-close {
+            float: right;
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 1.5em;
+            cursor: pointer;
+        }
+
+        .modal .modal-close:hover {
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal()">✕</button>
+            <h2 id="modalTitle">Generate API Key</h2>
+            <form id="modalForm">
+                <input type="text" id="modalKeyName" placeholder="Key Name (e.g., 'My App')">
+                <input type="number" id="modalExpiresDays" placeholder="Expires in days (default: 365)" value="365">
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button type="submit" class="btn btn-primary">Generate</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                </div>
+            </form>
+            <div id="modalResult" style="margin-top: 15px; display: none;">
+                <p style="color: #4ade80;">✅ Key generated successfully!</p>
+                <div class="api-key-display">
+                    <span class="key-text" id="modalNewKey"></span>
+                    <button class="copy-btn" onclick="copyToClipboard('modalNewKey')">📋 Copy</button>
+                </div>
+                <p style="color: #888; font-size: 0.8em;">Save this key now. It won't be shown again!</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+
+        <!-- ===== HEADER ===== -->
+        <div class="header">
+            <h1>⚡ Vostud AI Platform</h1>
+            <div class="header-actions">
+                <span id="userDisplay" style="color: #aaa; display: none;">👤 <span id="usernameDisplay"></span></span>
+                <button class="btn btn-secondary" id="logoutBtn" style="display: none;" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <!-- ===== AUTH CONTAINER ===== -->
+        <div class="auth-container" id="authContainer">
+            <h2 id="authTitle">🔑 Login</h2>
+            <div class="error-msg" id="authError"></div>
+            <form id="authForm">
+                <input type="email" id="authEmail" placeholder="Email" required>
+                <input type="text" id="authUsername" placeholder="Username" style="display: none;">
+                <input type="password" id="authPassword" placeholder="Password" required>
+                <button type="submit" class="btn btn-primary" id="authSubmitBtn">Login</button>
+            </form>
+            <div class="switch-link" id="authSwitch" onclick="toggleAuthMode()">
+                Don't have an account? <strong>Register</strong>
+            </div>
+        </div>
+
+        <!-- ===== DASHBOARD ===== -->
+        <div class="dashboard" id="dashboard">
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" data-tab="overview" onclick="switchTab('overview')">📊 Overview</button>
+                <button class="tab" data-tab="keys" onclick="switchTab('keys')">🔑 API Keys</button>
+                <button class="tab" data-tab="models" onclick="switchTab('models')">🤖 Models</button>
+                <button class="tab" data-tab="upload" onclick="switchTab('upload')">📄 Upload</button>
+                <button class="tab" data-tab="chat" onclick="switchTab('chat')">💬 Chat</button>
+            </div>
+
+            <!-- ===== TAB: Overview ===== -->
+            <div class="tab-content active" id="tab-overview">
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card">
+                        <div class="number" id="statKeys">0</div>
+                        <div class="label">API Keys</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number" id="statRequests">0</div>
+                        <div class="label">Total Requests</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number" id="statDocs">0</div>
+                        <div class="label">Documents</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number" id="statModels">0</div>
+                        <div class="label">Available Models</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>🚀 Quick Actions</h3>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-primary" onclick="openGenerateKeyModal()">+ Generate API Key</button>
+                        <button class="btn btn-secondary" onclick="switchTab('upload')">📄 Upload Document</button>
+                        <button class="btn btn-secondary" onclick="switchTab('chat')">💬 Chat with AI</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>📊 API Usage</h3>
+                    <div id="usageChart" style="height: 200px; display: flex; align-items: center; justify-content: center; color: #666;">
+                        <span>Loading usage data...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: API Keys ===== -->
+            <div class="tab-content" id="tab-keys">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <h3>🔑 Your API Keys</h3>
+                        <button class="btn btn-primary" onclick="openGenerateKeyModal()">+ Generate New Key</button>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="keys-table" id="keysTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Key</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Expires</th>
+                                    <th>Usage</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="keysTableBody">
+                                <tr>
+                                    <td colspan="7" style="text-align: center; color: #666; padding: 30px;">Loading keys...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: Models ===== -->
+            <div class="tab-content" id="tab-models">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <h3>🤖 Available Models</h3>
+                        <div>
+                            <button class="btn btn-secondary" onclick="setAutoMode(true)">🔁 Auto Mode</button>
+                            <button class="btn btn-secondary" onclick="switchNextModel()">⏭ Next Model</button>
+                            <button class="btn btn-secondary" onclick="refreshModels()">🔄 Refresh</button>
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px; color: #888;" id="currentModelDisplay">
+                        Current model: <strong id="currentModelName">auto</strong>
+                        <span id="autoModeBadge" style="background: rgba(74,222,128,0.2); color: #4ade80; padding: 2px 10px; border-radius: 10px; font-size: 0.8em; margin-left: 10px;">✅ Auto</span>
+                    </div>
+                    <div class="model-grid" id="modelGrid">
+                        <div style="text-align: center; color: #666; padding: 30px; width: 100%;">Loading models...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: Upload ===== -->
+            <div class="tab-content" id="tab-upload">
+                <div class="card">
+                    <h3>📄 Upload Documents</h3>
+                    <p style="color: #888; margin-bottom: 15px;">Upload PDFs, text files, or code files to add to your knowledge base.</p>
+                    <div class="upload-area" id="uploadArea">
+                        <div style="font-size: 3em; margin-bottom: 10px;">📤</div>
+                        <p style="color: #aaa; margin-bottom: 10px;">Drag & drop files here, or click to browse</p>
+                        <p style="color: #666; font-size: 0.8em;">Supported: .pdf, .txt, .lua, .luau</p>
+                        <input type="file" id="fileInput" multiple accept=".pdf,.txt,.lua,.luau">
+                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()" style="margin-top: 15px;">Choose Files</button>
+                    </div>
+                    <div id="uploadProgress" style="display: none; margin-top: 15px;">
+                        <div style="background: rgba(255,255,255,0.05); border-radius: 8px; height: 20px; overflow: hidden;">
+                            <div id="uploadProgressBar" style="background: linear-gradient(90deg, #667eea, #764ba2); height: 100%; width: 0%; transition: width 0.3s;"></div>
+                        </div>
+                        <p style="color: #888; font-size: 0.9em; margin-top: 5px;" id="uploadStatusText">Uploading...</p>
+                    </div>
+                    <div id="uploadedFiles" style="margin-top: 15px;"></div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: Chat ===== -->
+            <div class="tab-content" id="tab-chat">
+                <div class="card">
+                    <h3>💬 Chat with Vostud AI</h3>
+                    <p style="color: #888; margin-bottom: 15px;">Ask questions about your uploaded documents or general coding help.</p>
+                    <div class="chat-box" id="chatBox">
+                        <div class="bot-msg">🤖 Vostud AI: Hello! I'm your coding assistant. Ask me anything about Lua, Luau, Python, or your uploaded documents!</div>
+                    </div>
+                    <div class="chat-input-group">
+                        <input type="text" id="chatInput" placeholder="Ask a question..." onkeypress="if(event.key==='Enter') sendChatMessage()">
+                        <button class="btn btn-primary" onclick="sendChatMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- end dashboard -->
+
+    </div><!-- end container -->
+
+    <script>
+        // ============================================
+        // CONFIGURATION
+        // ============================================
+        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ?
+            'http://localhost:8000' :
+            'https://vostud-ai.onrender.com';
+
+        let authToken = localStorage.getItem('vostud_api_key');
+        let currentUser = null;
+        let isLoginMode = true;
+
+        // ============================================
+        // TOAST NOTIFICATIONS
+        // ============================================
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast show ${type}`;
+            clearTimeout(toast._timeout);
+            toast._timeout = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 4000);
+        }
+
+        // ============================================
+        // AUTHENTICATION
+        // ============================================
+        function toggleAuthMode() {
+            isLoginMode = !isLoginMode;
+            const title = document.getElementById('authTitle');
+            const switchLink = document.getElementById('authSwitch');
+            const usernameField = document.getElementById('authUsername');
+            const submitBtn = document.getElementById('authSubmitBtn');
+
+            if (isLoginMode) {
+                title.textContent = '🔑 Login';
+                usernameField.style.display = 'none';
+                submitBtn.textContent = 'Login';
+                switchLink.innerHTML = `Don't have an account? <strong>Register</strong>`;
+            } else {
+                title.textContent = '📝 Register';
+                usernameField.style.display = 'block';
+                submitBtn.textContent = 'Register';
+                switchLink.innerHTML = `Already have an account? <strong>Login</strong>`;
+            }
+            document.getElementById('authError').style.display = 'none';
+        }
+
+        document.getElementById('authForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+            const username = document.getElementById('authUsername').value;
+            const errorEl = document.getElementById('authError');
+            const submitBtn = document.getElementById('authSubmitBtn');
+
+            errorEl.style.display = 'none';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Loading...';
+
+            try {
+                let endpoint, body;
+                if (isLoginMode) {
+                    // Login - for now we'll register then use the key
+                    // In production, you'd have a proper login endpoint
+                    showToast('Please register first, then use your API key to log in.', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Login';
+                    return;
+                } else {
+                    // Register
+                    endpoint = `${API_URL}/auth/register`;
+                    body = { email, username, password };
+                }
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showToast('Registration successful! Please login.', 'success');
+                    toggleAuthMode();
+                    // Pre-fill email
+                    document.getElementById('authEmail').value = email;
+                } else {
+                    errorEl.textContent = data.detail || 'Registration failed';
+                    errorEl.style.display = 'block';
+                }
+            } catch (error) {
+                errorEl.textContent = error.message || 'Network error';
+                errorEl.style.display = 'block';
+            }
+
+            submitBtn.disabled = false;
+            submitBtn.textContent = isLoginMode ? 'Login' : 'Register';
+        });
+
+        // Check if already logged in
+        function checkAuth() {
+            const key = localStorage.getItem('vostud_api_key');
+            if (key) {
+                authToken = key;
+                showDashboard();
+                loadDashboardData();
+            } else {
+                document.getElementById('authContainer').style.display = 'block';
+                document.getElementById('dashboard').style.display = 'none';
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('vostud_api_key');
+            authToken = null;
+            currentUser = null;
+            document.getElementById('authContainer').style.display = 'block';
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('logoutBtn').style.display = 'none';
+            document.getElementById('userDisplay').style.display = 'none';
+            showToast('Logged out successfully');
+        }
+
+        function showDashboard() {
+            document.getElementById('authContainer').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('logoutBtn').style.display = 'inline-block';
+            document.getElementById('userDisplay').style.display = 'inline-block';
+            document.getElementById('usernameDisplay').textContent = 'User';
+        }
+
+        // ============================================
+        // DASHBOARD TABS
+        // ============================================
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+            document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            // Refresh data for specific tabs
+            if (tabName === 'keys') loadKeys();
+            if (tabName === 'models') loadModels();
+            if (tabName === 'overview') loadDashboardData();
+        }
+
+        // ============================================
+        // API HELPERS
+        // ============================================
+        async function apiRequest(endpoint, method = 'GET', body = null) {
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            if (authToken) {
+                headers['X-API-Key'] = authToken;
+            }
+
+            const options = {
+                method,
+                headers,
+            };
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+
+            const response = await fetch(`${API_URL}${endpoint}`, options);
+
+            // If 401, clear auth and redirect to login
+            if (response.status === 401) {
+                localStorage.removeItem('vostud_api_key');
+                authToken = null;
+                showToast('Session expired. Please login again.', 'error');
+                checkAuth();
+                throw new Error('Unauthorized');
+            }
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || data.message || 'API error');
+            }
+            return data;
+        }
+
+        // ============================================
+        // LOAD DASHBOARD DATA
+        // ============================================
+        async function loadDashboardData() {
+            try {
+                // Get API key stats
+                const stats = await apiRequest('/keys/stats');
+                document.getElementById('statKeys').textContent = stats.total_requests || 0;
+                document.getElementById('statRequests').textContent = stats.last_24h || 0;
+
+                // Get knowledge stats
+                const docStats = await apiRequest('/knowledge-stats');
+                document.getElementById('statDocs').textContent = docStats.total_documents || 0;
+
+                // Get models
+                const models = await apiRequest('/models');
+                document.getElementById('statModels').textContent = models.available_models ? models.available_models.length : 0;
+
+                // Update usage chart placeholder
+                document.getElementById('usageChart').innerHTML = `
+                    <div style="text-align: center;">
+                        <div style="font-size: 2em;">📊</div>
+                        <p style="color: #888; margin-top: 10px;">${stats.total_requests || 0} total requests</p>
+                        <p style="color: #888; font-size: 0.8em;">${stats.last_24h || 0} in the last 24 hours</p>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Failed to load dashboard:', error);
+            }
+        }
+
+        // ============================================
+        // API KEYS
+        // ============================================
+        async function loadKeys() {
+            try {
+                const data = await apiRequest('/keys');
+                const tbody = document.getElementById('keysTableBody');
+
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: #666; padding: 30px;">
+                                No API keys yet. Generate your first key!
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tbody.innerHTML = data.map(key => `
+                    <tr>
+                        <td>${key.name || 'Unnamed'}</td>
+                        <td style="font-family: monospace; font-size: 0.85em;">${key.key_prefix}...</td>
+                        <td><span class="status-${key.status}">${key.status}</span></td>
+                        <td>${new Date(key.created_at).toLocaleDateString()}</td>
+                        <td>${key.expires_at ? new Date(key.expires_at).toLocaleDateString() : 'Never'}</td>
+                        <td>${key.usage_count || 0}</td>
+                        <td>
+                            <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.8em;" onclick="revokeKey('${key.key_prefix}')">
+                                Revoke
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load keys:', error);
+            }
+        }
+
+        // Modal for generating keys
+        function openGenerateKeyModal() {
+            document.getElementById('modalOverlay').classList.add('show');
+            document.getElementById('modalTitle').textContent = '🔑 Generate API Key';
+            document.getElementById('modalResult').style.display = 'none';
+            document.getElementById('modalForm').style.display = 'block';
+            document.getElementById('modalKeyName').value = '';
+            document.getElementById('modalExpiresDays').value = '365';
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('show');
+        }
+
+        document.getElementById('modalForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const name = document.getElementById('modalKeyName').value || 'My API Key';
+            const expiresInDays = parseInt(document.getElementById('modalExpiresDays').value) || 365;
+
+            try {
+                const result = await apiRequest('/keys/generate', 'POST', {
+                    name: name,
+                    expires_in_days: expiresInDays
+                });
+
+                document.getElementById('modalForm').style.display = 'none';
+                document.getElementById('modalResult').style.display = 'block';
+                document.getElementById('modalNewKey').textContent = result.api_key;
+
+                showToast('🎉 API Key generated successfully!');
+                loadKeys();
+                loadDashboardData();
+            } catch (error) {
+                showToast('Failed to generate key: ' + error.message, 'error');
+            }
+        });
+
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('📋 Copied to clipboard!');
+            }).catch(() => {
+                // Fallback
+                const range = document.createRange();
+                const el = document.getElementById(elementId);
+                range.selectNode(el);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                document.execCommand('copy');
+                showToast('📋 Copied to clipboard!');
+            });
+        }
+
+        async function revokeKey(keyPrefix) {
+            if (!confirm(`Are you sure you want to revoke key starting with "${keyPrefix}"?`)) return;
+
+            try {
+                await apiRequest(`/keys/${keyPrefix}`, 'DELETE');
+                showToast('Key revoked successfully');
+                loadKeys();
+                loadDashboardData();
+            } catch (error) {
+                showToast('Failed to revoke key: ' + error.message, 'error');
+            }
+        }
+
+        // ============================================
+        // MODELS
+        // ============================================
+        async function loadModels() {
+            try {
+                const data = await apiRequest('/models');
+                const grid = document.getElementById('modelGrid');
+                const currentModel = data.current_model || 'auto';
+                const autoMode = data.auto_mode;
+
+                document.getElementById('currentModelName').textContent = currentModel;
+                document.getElementById('autoModeBadge').textContent = autoMode ? '✅ Auto' : '🎯 Manual';
+
+                if (!data.available_models || data.available_models.length === 0) {
+                    grid.innerHTML = `<div style="text-align: center; color: #666; padding: 30px; width: 100%;">No models available</div>`;
+                    return;
+                }
+
+                grid.innerHTML = data.available_models.map(model => {
+                    const isActive = model.key === currentModel || (autoMode && model.status === 'working');
+                    const statusEmoji = model.status === 'working' ? '✅' : model.status === 'failed' ? '❌' : '⏳';
+                    const statusClass = model.status || 'untested';
+                    return `
+                        <div class="model-item ${isActive ? 'active' : ''}" onclick="selectModel('${model.key}')">
+                            <div class="model-name">${statusEmoji} ${model.model}</div>
+                            <div class="model-api">${model.api} • ${model.cost?.tier || 'free'}</div>
+                            <span class="model-status ${statusClass}">${model.status || 'untested'}</span>
+                            ${isActive ? ' <span style="color: #4ade80; font-size: 0.8em;">← Active</span>' : ''}
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Failed to load models:', error);
+            }
+        }
+
+        async function selectModel(modelKey) {
+            try {
+                await apiRequest('/models/switch', 'POST', { model: modelKey });
+                showToast(`Switched to model: ${modelKey}`);
+                loadModels();
+            } catch (error) {
+                showToast('Failed to switch model: ' + error.message, 'error');
+            }
+        }
+
+        async function setAutoMode(enabled) {
+            try {
+                await apiRequest(`/models/auto?enabled=${enabled}`, 'POST');
+                showToast(enabled ? 'Auto mode enabled' : 'Manual mode enabled');
+                loadModels();
+            } catch (error) {
+                showToast('Failed to set auto mode: ' + error.message, 'error');
+            }
+        }
+
+        async function switchNextModel() {
+            try {
+                await apiRequest('/models/next', 'POST');
+                showToast('Switched to next model');
+                loadModels();
+            } catch (error) {
+                showToast('Failed to switch: ' + error.message, 'error');
+            }
+        }
+
+        function refreshModels() {
+            loadModels();
+            showToast('🔄 Models refreshed');
+        }
+
+        // ============================================
+        // UPLOAD
+        // ============================================
+        document.getElementById('fileInput').addEventListener('change', async function(e) {
+            const files = this.files;
+            if (!files.length) return;
+
+            const progress = document.getElementById('uploadProgress');
+            const progressBar = document.getElementById('uploadProgressBar');
+            const statusText = document.getElementById('uploadStatusText');
+            progress.style.display = 'block';
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                progressBar.style.width = `${((i + 1) / files.length) * 100}%`;
+                statusText.textContent = `Uploading ${file.name}... (${i + 1}/${files.length})`;
+
+                try {
+                    const response = await fetch(`${API_URL}/upload`, {
+                        method: 'POST',
+                        headers: {
+                            'X-API-Key': authToken
+                        },
+                        body: formData
+                    });
+
+                    const data = await response.json();
+                    if (response.ok) {
+                        showToast(`✅ ${file.name} uploaded successfully (${data.chunks_processed} chunks)`);
+                        addUploadedFile(file.name, data.chunks_processed);
+                    } else {
+                        showToast(`❌ Failed to upload ${file.name}: ${data.detail}`, 'error');
+                    }
+                } catch (error) {
+                    showToast(`❌ Error uploading ${file.name}: ${error.message}`, 'error');
+                }
+            }
+
+            progress.style.display = 'none';
+            progressBar.style.width = '0%';
+            this.value = '';
+            loadDashboardData();
+        });
+
+        // Drag and drop
+        const uploadArea = document.getElementById('uploadArea');
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#667eea';
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.borderColor = 'rgba(255,255,255,0.1)';
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = 'rgba(255,255,255,0.1)';
+            document.getElementById('fileInput').files = e.dataTransfer.files;
+            document.getElementById('fileInput').dispatchEvent(new Event('change'));
+        });
+        uploadArea.addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+
+        function addUploadedFile(name, chunks) {
+            const container = document.getElementById('uploadedFiles');
+            const div = document.createElement('div');
+            div.style.cssText = 'padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;';
+            div.innerHTML = `
+                <span>📄 ${name}</span>
+                <span style="color: #888; font-size: 0.8em;">${chunks || '?'} chunks</span>
+            `;
+            container.prepend(div);
+        }
+
+        // ============================================
+        // CHAT
+        // ============================================
+        async function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            const chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML += `<div class="user-msg">👤 You: ${message}</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+            input.value = '';
+
+            // Add thinking indicator
+            const thinkingId = 'thinking-' + Date.now();
+            chatBox.innerHTML += `<div class="bot-msg" id="${thinkingId}">🤖 Thinking...</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                const response = await fetch(`${API_URL}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': authToken
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        use_rag: true
+                    })
+                });
+
+                const data = await response.json();
+
+                // Remove thinking indicator
+                const thinkingEl = document.getElementById(thinkingId);
+                if (thinkingEl) thinkingEl.remove();
+
+                if (response.ok) {
+                    chatBox.innerHTML += `<div class="bot-msg">🤖 Vostud AI: ${data.response}</div>`;
+                } else {
+                    chatBox.innerHTML += `<div class="bot-msg" style="color: #f87171;">❌ Error: ${data.detail || 'Unknown error'}</div>`;
+                }
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch (error) {
+                const thinkingEl = document.getElementById(thinkingId);
+                if (thinkingEl) thinkingEl.remove();
+                chatBox.innerHTML += `<div class="bot-msg" style="color: #f87171;">❌ Network error: ${error.message}</div>`;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        checkAuth();
+
+        // Close modal on overlay click
+        document.getElementById('modalOverlay').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        // Enter key for chat
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendChatMessage();
+        });
+
+        console.log('🚀 Vostud AI Platform loaded!');
+        console.log(`📡 API URL: ${API_URL}`);
+    </script>
+
+</body>
+</html>
