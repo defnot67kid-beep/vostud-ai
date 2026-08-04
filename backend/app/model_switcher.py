@@ -1,5 +1,7 @@
-# Vostud AI - Model Switcher System
-# Allows manual and automatic model switching
+"""
+Vostud AI - Model Switcher System
+Manages automatic and manual model selection
+"""
 
 class ModelSwitcher:
     """Manage and switch between different AI models"""
@@ -92,7 +94,6 @@ class ModelSwitcher:
         # Try working models first
         for key, info in self.available_models.items():
             if info.get('status') == 'working':
-                # Score based on speed and cost
                 score = 0
                 if info['cost']['free']:
                     score += 10
