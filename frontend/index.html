@@ -47,6 +47,8 @@
             padding: 12px 20px;
             margin-bottom: 20px;
             border: 1px solid rgba(255,255,255,0.05);
+            flex-wrap: wrap;
+            gap: 10px;
         }
         .status-item {
             display: flex;
@@ -280,10 +282,9 @@
     <div class="container">
         <header>
             <h1>⚡ Vostud AI</h1>
-            <p>Ultimate Coding Assistant for Lua, Luau &amp; Python</p>
+            <p>Custom Coding Assistant for Lua, Luau &amp; Python</p>
         </header>
 
-        <!-- Status Bar -->
         <div class="status-bar">
             <div class="status-item">
                 <span class="status-dot green"></span>
@@ -300,7 +301,6 @@
             </div>
         </div>
 
-        <!-- Upload Section -->
         <div class="upload-section">
             <h3>📄 Upload Study Materials</h3>
             <input type="file" id="fileInput" accept=".pdf,.txt,.lua,.luau">
@@ -308,7 +308,6 @@
             <div id="uploadStatus"></div>
         </div>
 
-        <!-- Model Selector -->
         <div class="model-selector">
             <label>🎯 Model:</label>
             <select id="modelSelect">
@@ -320,18 +319,17 @@
             <span class="model-status" id="modelStatus">✅ Auto mode</span>
         </div>
 
-        <!-- Chat Section -->
         <div class="chat-section">
             <div class="chat-history" id="chatHistory">
                 <div class="message bot">
-                    <strong>Vostud AI:</strong> Hello! I'm Vostud AI, your ultimate coding assistant. I specialize in Lua, Luau (Roblox), and Python.
+                    <strong>Vostud AI:</strong> Hello! I'm Vostud AI, your custom coding assistant. I specialize in Lua, Luau (Roblox), and Python.
                     <br><br>
                     <strong>Features:</strong>
-                    <br>• Upload code files (.lua, .luau, .py, .txt)
+                    <br>• Upload code files (.lua, .luau, .py, .txt, .pdf)
                     <br>• Get expert coding help with best practices
                     <br>• Debug your code with advanced solutions
                     <br>• Generate quizzes to test your knowledge
-                    <br>• Switch between different AI models
+                    <br>• Switch between multiple AI models
                     <br><br>
                     What would you like help with today?
                 </div>
@@ -350,12 +348,11 @@
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8000';
+        const API_URL = 'https://vostud-ai.onrender.com';
         let conversationHistory = [];
         let currentModel = 'auto';
         let availableModels = [];
 
-        // DOM Elements
         const chatHistory = document.getElementById('chatHistory');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
@@ -376,7 +373,6 @@
         const docCount = document.getElementById('docCount');
         const modelStatus = document.getElementById('modelStatus');
 
-        // Send message
         async function sendMessage() {
             const message = userInput.value.trim();
             if (!message) return;
@@ -415,7 +411,6 @@
             }
         }
 
-        // Upload document
         async function uploadDocument() {
             const file = fileInput.files[0];
             if (!file) {
@@ -450,7 +445,6 @@
             }
         }
 
-        // Add message to chat
         function addMessage(type, content) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${type}`;
@@ -460,12 +454,10 @@
             return messageDiv;
         }
 
-        // Show typing indicator
         function showTyping(active) {
             typingIndicator.classList.toggle('active', active);
         }
 
-        // Update stats
         async function updateStats() {
             try {
                 const response = await fetch(`${API_URL}/knowledge-stats`);
@@ -474,7 +466,6 @@
             } catch (e) {}
         }
 
-        // Load models
         async function loadModels() {
             try {
                 const response = await fetch(`${API_URL}/models`);
@@ -483,7 +474,6 @@
                 currentModel = data.current_model || 'auto';
                 currentModelDisplay.textContent = currentModel;
                 
-                // Populate dropdown
                 modelSelect.innerHTML = '<option value="auto">🤖 Auto (Best Available)</option>';
                 availableModels.forEach(m => {
                     const opt = document.createElement('option');
@@ -502,7 +492,6 @@
             }
         }
 
-        // Switch model
         async function switchModel(modelKey) {
             try {
                 const response = await fetch(`${API_URL}/models/switch`, {
@@ -520,7 +509,6 @@
             }
         }
 
-        // Toggle auto mode
         async function toggleAuto() {
             try {
                 const isAuto = currentModel === 'auto';
@@ -539,7 +527,6 @@
             }
         }
 
-        // Generate quiz
         async function generateQuiz() {
             const topic = userInput.value.trim() || 'coding';
             userInput.value = '';
@@ -561,7 +548,6 @@
             }
         }
 
-        // Debug helper - adds a debug prefix to questions
         function debugMode() {
             const message = userInput.value.trim();
             if (message) {
@@ -572,14 +558,12 @@
             }
         }
 
-        // Clear chat
         function clearChat() {
             chatHistory.innerHTML = '';
             conversationHistory = [];
             addMessage('bot', '🔄 Chat cleared. How can I help you?');
         }
 
-        // Event listeners
         sendBtn.addEventListener('click', sendMessage);
         userInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -606,11 +590,8 @@
             }
         });
 
-        // Initial load
         updateStats();
         loadModels();
-        
-        // Periodic refresh
         setInterval(updateStats, 30000);
         setInterval(loadModels, 60000);
     </script>
