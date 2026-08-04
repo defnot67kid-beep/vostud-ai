@@ -3,24 +3,24 @@ from typing import List
 from PyPDF2 import PdfReader
 
 class DocumentProcessor:
+    """Vostud AI - Document Processing for RAG"""
+    
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
     
     def process_document(self, file_path: str) -> List[str]:
-        """Process both PDF and TXT files"""
         file_ext = os.path.splitext(file_path)[1].lower()
         
         if file_ext == '.pdf':
             return self.process_pdf(file_path)
-        elif file_ext == '.txt':
+        elif file_ext in ['.txt', '.lua', '.luau']:
             return self.process_text_file(file_path)
         else:
             print(f"⚠️ Unsupported file type: {file_ext}")
             return []
     
     def process_pdf(self, file_path: str) -> List[str]:
-        """Extract and chunk text from PDF"""
         try:
             reader = PdfReader(file_path)
             text = ""
@@ -38,7 +38,6 @@ class DocumentProcessor:
             return []
     
     def process_text_file(self, file_path: str) -> List[str]:
-        """Process a text file"""
         try:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 text = f.read()
@@ -50,16 +49,11 @@ class DocumentProcessor:
             return []
     
     def process_text(self, text: str) -> List[str]:
-        """Chunk regular text"""
         if not text or not text.strip():
             return []
         return self._chunk_text(text)
     
     def _chunk_text(self, text: str) -> List[str]:
-        """Simple text chunking"""
-        if not text:
-            return []
-        
         paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
         if not paragraphs:
             paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
