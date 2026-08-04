@@ -45,7 +45,7 @@ class ChatRequest(BaseModel):
     message: str
     history: Optional[List[Dict]] = None
     use_rag: bool = True
-    model: Optional[str] = None  # Model override
+    model: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -57,14 +57,18 @@ class QuizRequest(BaseModel):
     num_questions: int = 5
 
 class ModelSwitchRequest(BaseModel):
-    model: str  # 'auto' or specific model key
+    model: str
 
 class ModelSwitchResponse(BaseModel):
     current_model: str
     available_models: List[Dict]
     message: str
 
+# ============================================
+# ROOT ENDPOINT - FIXED FOR HEAD REQUESTS
+# ============================================
 @app.get("/")
+@app.head("/")  # <-- FIX: Accept HEAD requests for Render health checks
 async def root():
     return {
         "message": "Vostud AI API is running!",
@@ -174,7 +178,10 @@ async def get_stats():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Model Switcher Endpoints
+# ============================================
+# MODEL SWITCHER ENDPOINTS
+# ============================================
+
 @app.get("/models")
 async def get_models():
     if not chat_engine or not chat_engine.model_switcher:
@@ -219,6 +226,14 @@ async def switch_next():
         "current_model": chat_engine.model_switcher.get_current_model(),
         "message": result
     }
+
+# ============================================
+# HEALTH CHECK ENDPOINT
+# ============================================
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
     import uvicorn
