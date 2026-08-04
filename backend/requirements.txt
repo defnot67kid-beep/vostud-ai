@@ -1,16 +1,71 @@
+# ============================================
+# VOSTUD AI - BACKEND REQUIREMENTS
+# ============================================
+# Core Web Framework
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+python-dotenv==1.0.1
+pydantic==2.10.3
+pydantic-core==2.27.1
+
+# ============================================
+# AI / LLM Clients
+# ============================================
 openai==1.59.3
 groq==0.13.0
 google-generativeai==0.8.3
-python-multipart==0.0.20
-python-dotenv==1.0.1
-PyPDF2==3.0.1
-numpy==2.2.0
 requests==2.32.3
+httpx==0.28.1
+
+# ============================================
+# RAG & Document Processing
+# ============================================
+PyPDF2==3.0.1
 pypdf==5.1.0
-pydantic==2.10.3
-pymongo==4.10.1
+numpy==2.2.0
+
+# ============================================
+# Database (MongoDB)
+# ============================================
+pymongo==4.9.2
 motor==3.6.0
+
+# ============================================
+# Security & Auth
+# ============================================
 passlib==1.7.4
 bcrypt==4.2.0
+
+# ============================================
+# Utility Libraries
+# ============================================
+click>=7.0
+h11>=0.8
+httptools>=0.6.3
+watchfiles>=0.13
+websockets>=10.4
+uvloop>=0.14.0
+pyyaml>=5.1
+
+# ============================================
+# Transitive Dependencies (Pinned for Stability)
+# ============================================
+anyio>=3.5.0,<5
+distro>=1.7.0,<2
+jiter>=0.4.0,<1
+sniffio>=1.3.0
+tqdm>4
+typing-extensions>=4.8.0
+annotated-types>=0.6.0
+idna>=2.5,<4
+urllib3>=1.21.1,<3
+certifi>=2017.4.17
+charset-normalizer>=2,<4
+dnspython>=1.16.0,<3.0.0
+starlette>=0.40.0,<0.42.0
+google-ai-generativelanguage==0.6.10
+google-api-core>=2.15.0
+google-api-python-client>=2.15.0
+google-auth>=2.15.0
+protobuf>=3.19.0
