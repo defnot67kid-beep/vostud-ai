@@ -40,7 +40,6 @@ try:
 except Exception as e:
     print(f"❌ Chat Engine failed: {e}")
 
-# Models
 class ChatRequest(BaseModel):
     message: str
     history: Optional[List[Dict]] = None
@@ -59,16 +58,8 @@ class QuizRequest(BaseModel):
 class ModelSwitchRequest(BaseModel):
     model: str
 
-class ModelSwitchResponse(BaseModel):
-    current_model: str
-    available_models: List[Dict]
-    message: str
-
-# ============================================
-# ROOT ENDPOINT - FIXED FOR HEAD REQUESTS
-# ============================================
 @app.get("/")
-@app.head("/")  # <-- FIX: Accept HEAD requests for Render health checks
+@app.head("/")
 async def root():
     return {
         "message": "Vostud AI API is running!",
@@ -178,10 +169,6 @@ async def get_stats():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ============================================
-# MODEL SWITCHER ENDPOINTS
-# ============================================
-
 @app.get("/models")
 async def get_models():
     if not chat_engine or not chat_engine.model_switcher:
@@ -226,10 +213,6 @@ async def switch_next():
         "current_model": chat_engine.model_switcher.get_current_model(),
         "message": result
     }
-
-# ============================================
-# HEALTH CHECK ENDPOINT
-# ============================================
 
 @app.get("/health")
 async def health_check():
