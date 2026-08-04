@@ -76,7 +76,7 @@ class SmartAIEngine:
         try:
             import google.generativeai as genai
             api_key = os.getenv("GEMINI_API_KEY")
-            if api_key and api_key != "your_gemini_api_key_here" and api_key.startswith("AIza"):
+            if api_key and api_key != "your_gemini_api_key_here" and (api_key.startswith("AIza") or api_key.startswith("AQ")):
                 genai.configure(api_key=api_key)
                 
                 # Get available models
