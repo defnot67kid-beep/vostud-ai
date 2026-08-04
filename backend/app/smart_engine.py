@@ -9,7 +9,7 @@ from app.model_switcher import ModelSwitcher
 load_dotenv()
 
 class SmartAIEngine:
-    """Vostud AI with automatic API switching - Full Coding Assistant"""
+    """Vostud AI - Custom Model with Multi-API Routing"""
     
     def __init__(self):
         self.rag = None
@@ -35,14 +35,14 @@ class SmartAIEngine:
             self.model_switcher = ModelSwitcher(self)
             print(f"✅ Model Switcher initialized with {len(self.model_switcher.available_models)} models")
         
-        # Use specialized coding system prompt
+        # Use Vostud AI custom system prompt
         self.system_prompt = CODING_SYSTEM_PROMPT
 
     def _setup_apis(self):
-        """Setup all available API clients"""
+        """Setup all available API clients for Vostud AI"""
         
         # ============================================
-        # PRIMARY: Groq (Fastest, free, WORKING)
+        # PRIMARY: Groq (Fastest, free)
         # ============================================
         try:
             from groq import Groq
@@ -59,10 +59,10 @@ class SmartAIEngine:
                     ]
                 }
                 self.api_priority.append('groq')
-                print("✅ Groq API initialized (PRIMARY - Fastest!)")
+                print("✅ Groq API initialized (PRIMARY)")
             else:
                 if api_key and not api_key.startswith("gsk_"):
-                    print("⚠️ Groq API key format invalid (should start with 'gsk_')")
+                    print("⚠️ Groq API key format invalid")
                 else:
                     print("⚠️ Groq API key not set")
         except ImportError:
@@ -71,7 +71,7 @@ class SmartAIEngine:
             print(f"⚠️ Groq init error: {e}")
         
         # ============================================
-        # BACKUP 1: Google Gemini (Free, native API)
+        # BACKUP 1: Google Gemini (Free)
         # ============================================
         try:
             import google.generativeai as genai
@@ -79,7 +79,6 @@ class SmartAIEngine:
             if api_key and api_key != "your_gemini_api_key_here" and (api_key.startswith("AIza") or api_key.startswith("AQ")):
                 genai.configure(api_key=api_key)
                 
-                # Get available models
                 available_models = []
                 try:
                     for model in genai.list_models():
@@ -88,7 +87,6 @@ class SmartAIEngine:
                 except:
                     available_models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro']
                 
-                # Filter to working models
                 working_models = []
                 for model in available_models:
                     if model in ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro', 
@@ -109,9 +107,8 @@ class SmartAIEngine:
                 else:
                     print("⚠️ No working Gemini models found")
             else:
-                if api_key and not api_key.startswith("AIza"):
-                    print("⚠️ Gemini API key format invalid (should start with 'AIza')")
-                    print("   Get a key at: https://makersuite.google.com/app/apikey")
+                if api_key and not (api_key.startswith("AIza") or api_key.startswith("AQ")):
+                    print("⚠️ Gemini API key format invalid")
                 else:
                     print("⚠️ Gemini API key not set")
         except ImportError:
@@ -120,7 +117,7 @@ class SmartAIEngine:
             print(f"⚠️ Gemini init error: {e}")
         
         # ============================================
-        # BACKUP 2: OpenRouter (Free models, proxy)
+        # BACKUP 2: OpenRouter (Free models)
         # ============================================
         try:
             from openai import OpenAI
@@ -131,77 +128,30 @@ class SmartAIEngine:
                         base_url="https://openrouter.ai/api/v1",
                         api_key=api_key,
                         default_headers={
-                            "HTTP-Referer": "http://localhost:8000",
+                            "HTTP-Referer": "https://vostud-ai.onrender.com",
                             "X-Title": "Vostud AI"
                         }
                     ),
                     'type': 'openrouter',
                     'models': [
-                        # CONFIRMED WORKING OpenRouter models
-                        'google/gemini-flash-1.5',      # Google via OpenRouter
-                        'deepseek/deepseek-chat',       # DeepSeek
-                        'qwen/qwen-2.5-7b-instruct',    # Qwen
-                        'meta-llama/llama-3.1-8b-instruct',  # Llama 3.1
-                        'microsoft/phi-3-mini-128k-instruct'  # Phi-3
+                        'google/gemini-flash-1.5',
+                        'deepseek/deepseek-chat',
+                        'qwen/qwen-2.5-7b-instruct',
+                        'meta-llama/llama-3.1-8b-instruct',
+                        'microsoft/phi-3-mini-128k-instruct'
                     ]
                 }
                 self.api_priority.append('openrouter')
-                print(f"✅ OpenRouter API initialized (BACKUP 2 - {len(self.apis['openrouter']['models'])} models)")
+                print(f"✅ OpenRouter API initialized (BACKUP 2)")
             else:
                 if api_key and not api_key.startswith("sk-or-v1"):
-                    print("⚠️ OpenRouter API key format invalid (should start with 'sk-or-v1')")
+                    print("⚠️ OpenRouter API key format invalid")
                 else:
                     print("⚠️ OpenRouter API key not set")
         except ImportError:
             print("⚠️ OpenAI client not installed (pip install openai)")
         except Exception as e:
             print(f"⚠️ OpenRouter init error: {e}")
-        
-        # ============================================
-        # BACKUP 3: Ollama (Local, free - SLOW)
-        # ============================================
-        try:
-            import ollama
-            
-            try:
-                models_list = ollama.list()
-                
-                if models_list and hasattr(models_list, 'models'):
-                    model_names = []
-                    for m in models_list.models:
-                        model_names.append(m.model)
-                    
-                    if model_names:
-                        code_models = []
-                        for m in model_names:
-                            if any(name in m.lower() for name in ['llama2', 'qwen', 'codellama', 'mistral', 'deepseek', 'llama3', 'coder']):
-                                code_models.append(m)
-                        
-                        if not code_models:
-                            code_models = model_names
-                        
-                        if code_models:
-                            self.apis['ollama'] = {
-                                'client': ollama,
-                                'type': 'ollama',
-                                'models': code_models
-                            }
-                            self.api_priority.append('ollama')
-                            print(f"✅ Ollama initialized (BACKUP 3 - Slow)")
-                        else:
-                            print("⚠️ Ollama running but no valid models found")
-                    else:
-                        print("⚠️ Ollama running but no models found. Run: ollama pull llama2")
-                else:
-                    print("⚠️ Ollama running but no models found. Run: ollama pull llama2")
-                    
-            except Exception as e:
-                print(f"⚠️ Ollama connection error: {e}. Make sure Ollama is running.")
-                
-        except ImportError:
-            print("⚠️ Ollama not installed (pip install ollama)")
-        except Exception as e:
-            print(f"⚠️ Ollama init error: {e}")
         
         # ============================================
         # LAST RESORT: OpenAI (Paid)
@@ -216,12 +166,12 @@ class SmartAIEngine:
                     'models': ['gpt-3.5-turbo', 'gpt-4']
                 }
                 self.api_priority.append('openai')
-                print("✅ OpenAI initialized (LAST RESORT - Paid)")
+                print("✅ OpenAI initialized (LAST RESORT)")
             else:
                 if api_key and api_key.startswith("sk-test"):
-                    print("⚠️ OpenAI test key detected (not valid for API calls)")
+                    print("⚠️ OpenAI test key detected")
                 else:
-                    print("⚠️ OpenAI API key not set or invalid")
+                    print("⚠️ OpenAI API key not set")
         except ImportError:
             print("⚠️ OpenAI not installed (pip install openai)")
         except Exception as e:
@@ -232,10 +182,6 @@ class SmartAIEngine:
         # ============================================
         if not self.api_priority:
             print("❌ No APIs available! Please set up at least one API.")
-            print("   - Groq: https://console.groq.com (FREE, FAST)")
-            print("   - Gemini: https://makersuite.google.com/app/apikey (FREE)")
-            print("   - OpenRouter: https://openrouter.ai/ (FREE)")
-            print("   - Ollama: https://ollama.ai/ (LOCAL, FREE)")
         else:
             print(f"✅ {len(self.api_priority)} API(s) available: {', '.join(self.api_priority)}")
 
@@ -244,9 +190,9 @@ class SmartAIEngine:
                          conversation_history: List[Dict] = None,
                          use_rag: bool = True,
                          model_override: str = None) -> str:
-        """Generate response with model switching support"""
+        """Generate response using Vostud AI's custom model"""
         
-        # Get context from RAG if available
+        # Search RAG database if enabled
         context = ""
         if use_rag and self.rag:
             try:
@@ -257,7 +203,7 @@ class SmartAIEngine:
             except Exception as e:
                 print(f"⚠️ RAG search error: {e}")
         
-        # Build messages
+        # Build messages with custom system prompt
         messages = [
             {"role": "system", "content": self.system_prompt}
         ]
@@ -267,17 +213,17 @@ class SmartAIEngine:
         
         if context:
             context_message = f"""
-Relevant context from your study materials:
+Relevant context from your uploaded study materials:
 {context}
 
-Based on this context and your knowledge, answer the user's question.
+Based on this context, answer the user's question accurately.
 If the context doesn't contain the answer, use your general knowledge.
 """
             messages.append({"role": "system", "content": context_message})
         
         messages.append({"role": "user", "content": user_message})
         
-        # Check for model override
+        # Handle manual model selection
         if model_override and self.model_switcher:
             try:
                 print(f"🎯 Using manually selected model: {model_override}")
@@ -289,7 +235,7 @@ If the context doesn't contain the answer, use your general knowledge.
                 print(f"❌ Manual model selection failed: {e}")
                 print("Falling back to auto-selection...")
         
-        # Auto-select best model if enabled
+        # Auto-select best model
         if self.model_switcher and self.model_switcher.auto_mode:
             best_model = self.model_switcher.get_best_model()
             if best_model:
@@ -302,7 +248,7 @@ If the context doesn't contain the answer, use your general knowledge.
                 except Exception as e:
                     print(f"❌ Auto-selected model failed: {e}")
         
-        # Fallback to priority-based API switching
+        # Fallback to priority-based switching
         for api_name in self.api_priority:
             try:
                 print(f"🔄 Trying {api_name}...")
@@ -316,168 +262,16 @@ If the context doesn't contain the answer, use your general knowledge.
                 print(f"❌ {api_name} failed: {error_msg[:200]}")
                 continue
         
+        # If all APIs fail but we have context
         if context:
             return f"""I found relevant information in your study materials, but I'm having trouble connecting to my AI services.
 
 Here's what I found:
 {context[:500]}...
 
-💡 To enable AI responses, set up an API:
-- Groq (Fastest, Free): https://console.groq.com
-- Gemini (Free): https://makersuite.google.com/app/apikey
-- OpenRouter (Free): https://openrouter.ai/"""
+💡 To enable full AI responses, set up an API in your .env file."""
         
         return "❌ All APIs are currently unavailable. Please check your API keys or try again later."
-
-    def _call_specific_model(self, model_key: str, messages: List[Dict]) -> str:
-        """Call a specific model by its key (api/model)"""
-        if not self.model_switcher or model_key not in self.model_switcher.available_models:
-            return None
-        
-        model_info = self.model_switcher.available_models[model_key]
-        api_name = model_info['api']
-        model = model_info['model']
-        
-        if api_name in self.apis:
-            try:
-                api_config = self.apis[api_name]
-                if api_name == 'groq':
-                    result = self._call_groq_specific(api_config, messages, model)
-                elif api_name == 'gemini':
-                    result = self._call_gemini_specific(api_config, messages, model)
-                elif api_name == 'openrouter':
-                    result = self._call_openrouter_specific(api_config, messages, model)
-                elif api_name == 'ollama':
-                    result = self._call_ollama_specific(api_config, messages, model)
-                elif api_name == 'openai':
-                    result = self._call_openai_specific(api_config, messages, model)
-                else:
-                    return None
-                
-                if result:
-                    self.model_switcher.mark_model_status(model_key, 'working')
-                    return result
-            except Exception as e:
-                self.model_switcher.mark_model_status(model_key, 'failed')
-                raise e
-        
-        return None
-
-    def _call_groq_specific(self, config, messages, model):
-        client = config['client']
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1000
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            raise e
-
-    def _call_gemini_specific(self, config, messages, model):
-        prompt = ""
-        system_prompt = ""
-        
-        for msg in messages:
-            role = msg['role']
-            content = msg['content']
-            if role == 'system':
-                system_prompt += content + "\n\n"
-            elif role == 'user':
-                prompt += f"User: {content}\n"
-            elif role == 'assistant':
-                prompt += f"Assistant: {content}\n"
-        
-        if system_prompt:
-            prompt = f"System: {system_prompt}\n\n{prompt}"
-        prompt += "Assistant: "
-        
-        try:
-            model_obj = config['client'].GenerativeModel(model)
-            response = model_obj.generate_content(prompt)
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            raise e
-        
-        return None
-
-    def _call_openrouter_specific(self, config, messages, model):
-        client = config['client']
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1000
-            )
-            if response and response.choices:
-                return response.choices[0].message.content
-        except Exception as e:
-            raise e
-        return None
-
-    def _call_ollama_specific(self, config, messages, model):
-        import requests
-        
-        ollama_messages = []
-        system_content = ""
-        
-        for msg in messages:
-            role = msg['role']
-            content = msg['content']
-            if role == 'system':
-                system_content += content + "\n\n"
-            else:
-                if system_content and role == 'user' and not ollama_messages:
-                    content = f"{system_content}\n\n{content}"
-                    system_content = ""
-                ollama_messages.append({
-                    'role': role,
-                    'content': content
-                })
-        
-        if system_content:
-            ollama_messages.insert(0, {'role': 'user', 'content': system_content})
-        
-        try:
-            response = requests.post(
-                "http://localhost:11434/api/chat",
-                json={
-                    "model": model,
-                    "messages": ollama_messages,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.7,
-                        "num_predict": 1000
-                    }
-                },
-                timeout=120
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result and result.get('message'):
-                    return result['message']['content']
-        except Exception as e:
-            raise e
-        
-        return None
-
-    def _call_openai_specific(self, config, messages, model):
-        client = config['client']
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1000
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            raise e
 
     def _call_api(self, api_name: str, messages: List[Dict]) -> str:
         """Call specific API"""
@@ -493,8 +287,6 @@ Here's what I found:
                 return self._call_gemini(api_config, messages)
             elif api_name == 'openrouter':
                 return self._call_openrouter(api_config, messages)
-            elif api_name == 'ollama':
-                return self._call_ollama(api_config, messages)
             elif api_name == 'openai':
                 return self._call_openai(api_config, messages)
         except Exception as e:
@@ -612,72 +404,6 @@ Here's what I found:
         
         raise Exception("No OpenRouter models available")
 
-    def _call_ollama(self, config, messages):
-        ollama_messages = []
-        system_content = ""
-        
-        for msg in messages:
-            role = msg['role']
-            content = msg['content']
-            if role == 'system':
-                system_content += content + "\n\n"
-            else:
-                if system_content and role == 'user' and not ollama_messages:
-                    content = f"{system_content}\n\n{content}"
-                    system_content = ""
-                ollama_messages.append({
-                    'role': role,
-                    'content': content
-                })
-        
-        if system_content:
-            ollama_messages.insert(0, {'role': 'user', 'content': system_content})
-        
-        for model_name in config['models']:
-            try:
-                print(f"   Trying Ollama model: {model_name}")
-                response = requests.post(
-                    "http://localhost:11434/api/chat",
-                    json={
-                        "model": model_name,
-                        "messages": ollama_messages,
-                        "stream": False,
-                        "options": {
-                            "temperature": 0.7,
-                            "num_predict": 1000
-                        }
-                    },
-                    timeout=120
-                )
-                if response.status_code == 200:
-                    result = response.json()
-                    if result and result.get('message'):
-                        return result['message']['content']
-                else:
-                    error_msg = response.text[:100] if response.text else "Unknown error"
-                    if "model" in error_msg.lower() and "not found" in error_msg.lower():
-                        print(f"   ⚠️ Model {model_name} not found, trying next...")
-                        continue
-                    else:
-                        print(f"   ⚠️ Ollama returned {response.status_code}: {error_msg}")
-                        continue
-            except requests.exceptions.ConnectionError:
-                print(f"   ❌ Cannot connect to Ollama. Make sure it's running.")
-                raise Exception("Ollama not running")
-            except requests.exceptions.Timeout:
-                print(f"   ⚠️ Ollama timeout with {model_name}, trying next...")
-                continue
-            except Exception as e:
-                error_str = str(e)
-                if "not found" in error_str.lower():
-                    print(f"   ⚠️ Model {model_name} not available, trying next...")
-                    continue
-                else:
-                    print(f"   ⚠️ Ollama error with {model_name}: {error_str[:100]}")
-                    continue
-        
-        raise Exception("No Ollama models available")
-
     def _call_openai(self, config, messages):
         client = config['client']
         for model in config['models']:
@@ -696,7 +422,7 @@ Here's what I found:
                     print(f"   ⚠️ Model {model} not available, trying next...")
                     continue
                 elif "429" in error_str:
-                    raise Exception(f"OpenAI: No credits remaining or rate limited")
+                    raise Exception(f"OpenAI: No credits remaining")
                 elif "401" in error_str:
                     raise Exception(f"OpenAI: Invalid API key")
                 else:
@@ -705,8 +431,109 @@ Here's what I found:
         
         raise Exception("No OpenAI models available")
 
+    def _call_specific_model(self, model_key: str, messages: List[Dict]) -> str:
+        """Call a specific model by its key (api/model)"""
+        if not self.model_switcher or model_key not in self.model_switcher.available_models:
+            return None
+        
+        model_info = self.model_switcher.available_models[model_key]
+        api_name = model_info['api']
+        model = model_info['model']
+        
+        if api_name in self.apis:
+            try:
+                api_config = self.apis[api_name]
+                if api_name == 'groq':
+                    result = self._call_groq_specific(api_config, messages, model)
+                elif api_name == 'gemini':
+                    result = self._call_gemini_specific(api_config, messages, model)
+                elif api_name == 'openrouter':
+                    result = self._call_openrouter_specific(api_config, messages, model)
+                elif api_name == 'openai':
+                    result = self._call_openai_specific(api_config, messages, model)
+                else:
+                    return None
+                
+                if result:
+                    self.model_switcher.mark_model_status(model_key, 'working')
+                    return result
+            except Exception as e:
+                self.model_switcher.mark_model_status(model_key, 'failed')
+                raise e
+        
+        return None
+
+    def _call_groq_specific(self, config, messages, model):
+        client = config['client']
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            raise e
+
+    def _call_gemini_specific(self, config, messages, model):
+        prompt = ""
+        system_prompt = ""
+        
+        for msg in messages:
+            role = msg['role']
+            content = msg['content']
+            if role == 'system':
+                system_prompt += content + "\n\n"
+            elif role == 'user':
+                prompt += f"User: {content}\n"
+            elif role == 'assistant':
+                prompt += f"Assistant: {content}\n"
+        
+        if system_prompt:
+            prompt = f"System: {system_prompt}\n\n{prompt}"
+        prompt += "Assistant: "
+        
+        try:
+            model_obj = config['client'].GenerativeModel(model)
+            response = model_obj.generate_content(prompt)
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            raise e
+        
+        return None
+
+    def _call_openrouter_specific(self, config, messages, model):
+        client = config['client']
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            if response and response.choices:
+                return response.choices[0].message.content
+        except Exception as e:
+            raise e
+        return None
+
+    def _call_openai_specific(self, config, messages, model):
+        client = config['client']
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            raise e
+
     def generate_quiz(self, topic: str, num_questions: int = 5) -> str:
-        """Generate a quiz using available API"""
+        """Generate a quiz using Vostud AI"""
         
         context = ""
         if self.rag:
@@ -733,7 +560,7 @@ Make the questions challenging but fair.
         
         if context:
             prompt = f"""
-Using this context from study materials:
+Using this context from uploaded materials:
 {context}
 
 {prompt}
