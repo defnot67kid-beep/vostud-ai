@@ -1,0 +1,200 @@
+# ========================================
+# ENVIRONMENT VARIABLES (CRITICAL!)
+# ========================================
+.env
+.env.local
+.env.*.local
+*.env
+*.env.*
+!.env.example
+
+# ========================================
+# Python
+# ========================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.pyc
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+.virtualenv/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# ========================================
+# Vector Databases & Data Files
+# ========================================
+vector_store.pkl
+vector_store_simple.pkl
+*.faiss
+*.pkl
+data/
+!data/.gitkeep
+uploaded_docs/
+!uploaded_docs/.gitkeep
+
+# ========================================
+# IDEs / Editors
+# ========================================
+# VSCode
+.vscode/
+*.code-workspace
+.vscode-test/
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# VS Code
+.vscode/
+*.swp
+*.swo
+
+# ========================================
+# Logs & Debug
+# ========================================
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+
+# ========================================
+# OS Specific
+# ========================================
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.ds_store
+*.DS_Store
+Desktop.ini
+$RECYCLE.BIN/
+
+# ========================================
+# Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ========================================
+# Database files
+# ========================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================================
+# Temporary files
+# ========================================
+*.tmp
+*.temp
+*.cache
+*.bak
+*.swp
+*.swo
+*~
+
+# ========================================
+# Archive / Backup files
+# ========================================
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+*.bak
+*.old
+*.orig
+
+# ========================================
+# Node / Frontend (if you have any)
+# ========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+.npm/
+.eslintcache
+*.tsbuildinfo
+
+# ========================================
+# Secrets & Keys
+# ========================================
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+credentials/
+keys/
+*.secret
+*.private
+
+# ========================================
+# Render Deployment
+# ========================================
+.render/
+.render/
+build/
+dist/
+*.pid.lock

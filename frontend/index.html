@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vostud AI - Ultimate Coding Assistant</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            padding: 20px;
+            color: #fff;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: rgba(255,255,255,0.05);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        header h1 {
+            font-size: 2.5em;
+            background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 40px rgba(102,126,234,0.3);
+        }
+        header p {
+            color: #aaa;
+            font-size: 1.1em;
+            margin-top: 5px;
+        }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            padding: 12px 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-dot.green { background: #4ade80; }
+        .status-dot.yellow { background: #fbbf24; }
+        .status-dot.red { background: #f87171; }
+        .upload-section {
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .upload-section h3 {
+            color: #aaa;
+            margin-bottom: 10px;
+        }
+        .upload-section input[type="file"] {
+            color: #aaa;
+            padding: 10px;
+            border: 1px dashed rgba(255,255,255,0.2);
+            border-radius: 8px;
+            width: 100%;
+            background: transparent;
+        }
+        .upload-section button {
+            margin-top: 10px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .upload-section button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 25px rgba(102,126,234,0.4);
+        }
+        #uploadStatus { margin-top: 10px; padding: 10px; border-radius: 5px; }
+        .success { background: rgba(74,222,128,0.2); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+        .error { background: rgba(248,113,113,0.2); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+        .model-selector {
+            background: rgba(255,255,255,0.05);
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .model-selector label {
+            color: #aaa;
+            font-size: 0.9em;
+        }
+        .model-selector select {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 8px 15px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            min-width: 250px;
+            cursor: pointer;
+        }
+        .model-selector select option {
+            background: #1a1a2e;
+            color: #fff;
+        }
+        .model-selector button {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 8px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: background 0.2s;
+        }
+        .model-selector button:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .model-selector .model-status {
+            font-size: 0.8em;
+            color: #4ade80;
+            margin-left: auto;
+        }
+        .chat-section {
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 10px;
+            padding: 20px;
+            background: rgba(255,255,255,0.02);
+        }
+        .chat-history {
+            min-height: 400px;
+            max-height: 500px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 12px 18px;
+            border-radius: 12px;
+            line-height: 1.6;
+            max-width: 85%;
+        }
+        .message.bot {
+            background: rgba(102,126,234,0.15);
+            border: 1px solid rgba(102,126,234,0.1);
+            margin-right: auto;
+        }
+        .message.user {
+            background: rgba(118,75,162,0.2);
+            border: 1px solid rgba(118,75,162,0.1);
+            margin-left: auto;
+        }
+        .message .message-meta {
+            font-size: 0.7em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .input-section {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .input-section textarea {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            font-family: inherit;
+            resize: vertical;
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            min-height: 60px;
+        }
+        .input-section textarea::placeholder {
+            color: #666;
+        }
+        .input-section button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .input-section button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 25px rgba(102,126,234,0.4);
+        }
+        .input-section button.secondary {
+            background: rgba(255,255,255,0.1);
+        }
+        .input-section button.secondary:hover {
+            background: rgba(255,255,255,0.2);
+            box-shadow: none;
+        }
+        .input-section .button-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        code {
+            background: rgba(255,255,255,0.05);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 10px 0;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .typing-indicator {
+            display: none;
+            padding: 10px;
+            color: #666;
+            font-style: italic;
+        }
+        .typing-indicator.active {
+            display: block;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.15);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.25);
+        }
+        @media (max-width: 600px) {
+            .container { padding: 15px; }
+            header h1 { font-size: 1.8em; }
+            .model-selector { flex-direction: column; align-items: stretch; }
+            .model-selector select { min-width: 100%; }
+            .input-section { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚡ Vostud AI</h1>
+            <p>Ultimate Coding Assistant for Lua, Luau &amp; Python</p>
+        </header>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-dot green"></span>
+                <span id="apiStatus">Connected</span>
+            </div>
+            <div class="status-item">
+                🔌 <span id="currentApi">Loading...</span>
+            </div>
+            <div class="status-item">
+                🎯 <span id="currentModel">auto</span>
+            </div>
+            <div class="status-item">
+                📚 <span id="docCount">0</span> docs
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <h3>📄 Upload Study Materials</h3>
+            <input type="file" id="fileInput" accept=".pdf,.txt,.lua,.luau">
+            <button id="uploadBtn">Upload Document</button>
+            <div id="uploadStatus"></div>
+        </div>
+
+        <!-- Model Selector -->
+        <div class="model-selector">
+            <label>🎯 Model:</label>
+            <select id="modelSelect">
+                <option value="auto">🤖 Auto (Best Available)</option>
+            </select>
+            <button id="refreshModelsBtn">🔄 Refresh</button>
+            <button id="nextModelBtn">⏭ Next</button>
+            <button id="toggleAutoBtn">🔁 Auto</button>
+            <span class="model-status" id="modelStatus">✅ Auto mode</span>
+        </div>
+
+        <!-- Chat Section -->
+        <div class="chat-section">
+            <div class="chat-history" id="chatHistory">
+                <div class="message bot">
+                    <strong>Vostud AI:</strong> Hello! I'm Vostud AI, your ultimate coding assistant. I specialize in Lua, Luau (Roblox), and Python.
+                    <br><br>
+                    <strong>Features:</strong>
+                    <br>• Upload code files (.lua, .luau, .py, .txt)
+                    <br>• Get expert coding help with best practices
+                    <br>• Debug your code with advanced solutions
+                    <br>• Generate quizzes to test your knowledge
+                    <br>• Switch between different AI models
+                    <br><br>
+                    What would you like help with today?
+                </div>
+            </div>
+            <div class="typing-indicator" id="typingIndicator">Vostud AI is thinking...</div>
+            <div class="input-section">
+                <textarea id="userInput" rows="2" placeholder="Ask about Lua, Luau, Python, or upload code for debugging..."></textarea>
+                <div class="button-group">
+                    <button id="sendBtn">Send</button>
+                    <button id="quizBtn" class="secondary">📝 Quiz</button>
+                    <button id="debugBtn" class="secondary">🐛 Debug</button>
+                    <button id="clearBtn" class="secondary">🗑 Clear</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        let conversationHistory = [];
+        let currentModel = 'auto';
+        let availableModels = [];
+
+        // DOM Elements
+        const chatHistory = document.getElementById('chatHistory');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const fileInput = document.getElementById('fileInput');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const quizBtn = document.getElementById('quizBtn');
+        const debugBtn = document.getElementById('debugBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const modelSelect = document.getElementById('modelSelect');
+        const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+        const nextModelBtn = document.getElementById('nextModelBtn');
+        const toggleAutoBtn = document.getElementById('toggleAutoBtn');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const apiStatus = document.getElementById('apiStatus');
+        const currentApi = document.getElementById('currentApi');
+        const currentModelDisplay = document.getElementById('currentModel');
+        const docCount = document.getElementById('docCount');
+        const modelStatus = document.getElementById('modelStatus');
+
+        // Send message
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            addMessage('user', message);
+            userInput.value = '';
+            showTyping(true);
+
+            try {
+                const response = await fetch(`${API_URL}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: message,
+                        history: conversationHistory,
+                        use_rag: true,
+                        model: currentModel !== 'auto' ? currentModel : null
+                    })
+                });
+
+                const data = await response.json();
+                showTyping(false);
+                addMessage('bot', data.response);
+                if (data.api_used) currentApi.textContent = data.api_used;
+                if (data.model_used) {
+                    currentModelDisplay.textContent = data.model_used;
+                    currentModel = data.model_used;
+                }
+                conversationHistory.push(
+                    { role: 'user', content: message },
+                    { role: 'assistant', content: data.response }
+                );
+            } catch (error) {
+                showTyping(false);
+                addMessage('bot', '❌ Error: ' + error.message);
+            }
+        }
+
+        // Upload document
+        async function uploadDocument() {
+            const file = fileInput.files[0];
+            if (!file) {
+                uploadStatus.textContent = 'Please select a file.';
+                uploadStatus.className = 'error';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            uploadStatus.textContent = 'Uploading...';
+            uploadStatus.className = '';
+
+            try {
+                const response = await fetch(`${API_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    uploadStatus.textContent = '✅ ' + data.message;
+                    uploadStatus.className = 'success';
+                    updateStats();
+                    addMessage('bot', `📚 I've processed "${file.name}". I now have ${data.chunks_processed} new pieces of information!`);
+                } else {
+                    uploadStatus.textContent = '❌ ' + data.detail;
+                    uploadStatus.className = 'error';
+                }
+            } catch (error) {
+                uploadStatus.textContent = '❌ Error: ' + error.message;
+                uploadStatus.className = 'error';
+            }
+        }
+
+        // Add message to chat
+        function addMessage(type, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.innerHTML = content.replace(/\n/g, '<br>');
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            return messageDiv;
+        }
+
+        // Show typing indicator
+        function showTyping(active) {
+            typingIndicator.classList.toggle('active', active);
+        }
+
+        // Update stats
+        async function updateStats() {
+            try {
+                const response = await fetch(`${API_URL}/knowledge-stats`);
+                const data = await response.json();
+                docCount.textContent = data.total_documents || 0;
+            } catch (e) {}
+        }
+
+        // Load models
+        async function loadModels() {
+            try {
+                const response = await fetch(`${API_URL}/models`);
+                const data = await response.json();
+                availableModels = data.available_models || [];
+                currentModel = data.current_model || 'auto';
+                currentModelDisplay.textContent = currentModel;
+                
+                // Populate dropdown
+                modelSelect.innerHTML = '<option value="auto">🤖 Auto (Best Available)</option>';
+                availableModels.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.key;
+                    let statusEmoji = '❓';
+                    if (m.status === 'working') statusEmoji = '✅';
+                    else if (m.status === 'failed') statusEmoji = '❌';
+                    opt.textContent = `${statusEmoji} ${m.model} (${m.api})`;
+                    if (currentModel === m.key) opt.selected = true;
+                    modelSelect.appendChild(opt);
+                });
+                
+                modelStatus.textContent = data.auto_mode ? '✅ Auto mode' : '🎯 Manual mode';
+            } catch (e) {
+                console.error('Failed to load models:', e);
+            }
+        }
+
+        // Switch model
+        async function switchModel(modelKey) {
+            try {
+                const response = await fetch(`${API_URL}/models/switch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: modelKey })
+                });
+                const data = await response.json();
+                currentModel = data.current_model;
+                currentModelDisplay.textContent = currentModel;
+                modelStatus.textContent = data.auto_mode ? '✅ Auto mode' : '🎯 Manual mode';
+                loadModels();
+            } catch (e) {
+                console.error('Failed to switch model:', e);
+            }
+        }
+
+        // Toggle auto mode
+        async function toggleAuto() {
+            try {
+                const isAuto = currentModel === 'auto';
+                const response = await fetch(`${API_URL}/models/auto?enabled=${!isAuto}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (!isAuto) {
+                    currentModel = 'auto';
+                    currentModelDisplay.textContent = 'auto';
+                }
+                modelStatus.textContent = data.auto_mode ? '✅ Auto mode' : '🎯 Manual mode';
+                loadModels();
+            } catch (e) {
+                console.error('Failed to toggle auto:', e);
+            }
+        }
+
+        // Generate quiz
+        async function generateQuiz() {
+            const topic = userInput.value.trim() || 'coding';
+            userInput.value = '';
+            addMessage('user', `Generate a quiz about: ${topic}`);
+            showTyping(true);
+            
+            try {
+                const response = await fetch(`${API_URL}/quiz`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic: topic, num_questions: 5 })
+                });
+                const data = await response.json();
+                showTyping(false);
+                addMessage('bot', `📝 Quiz about ${topic}:\n\n${data.quiz}`);
+            } catch (error) {
+                showTyping(false);
+                addMessage('bot', '❌ Error generating quiz.');
+            }
+        }
+
+        // Debug helper - adds a debug prefix to questions
+        function debugMode() {
+            const message = userInput.value.trim();
+            if (message) {
+                userInput.value = `Debug this code and explain any issues:\n${message}`;
+                sendMessage();
+            } else {
+                addMessage('bot', '🐛 Paste your code in the chat box and click Debug again, or ask "Debug this code:" followed by your code.');
+            }
+        }
+
+        // Clear chat
+        function clearChat() {
+            chatHistory.innerHTML = '';
+            conversationHistory = [];
+            addMessage('bot', '🔄 Chat cleared. How can I help you?');
+        }
+
+        // Event listeners
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        uploadBtn.addEventListener('click', uploadDocument);
+        quizBtn.addEventListener('click', generateQuiz);
+        debugBtn.addEventListener('click', debugMode);
+        clearBtn.addEventListener('click', clearChat);
+        refreshModelsBtn.addEventListener('click', loadModels);
+        nextModelBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch(`${API_URL}/models/next`, { method: 'POST' });
+                const data = await response.json();
+                loadModels();
+            } catch (e) {}
+        });
+        toggleAutoBtn.addEventListener('click', toggleAuto);
+        modelSelect.addEventListener('change', (e) => {
+            if (e.target.value !== currentModel) {
+                switchModel(e.target.value);
+            }
+        });
+
+        // Initial load
+        updateStats();
+        loadModels();
+        
+        // Periodic refresh
+        setInterval(updateStats, 30000);
+        setInterval(loadModels, 60000);
+    </script>
+</body>
+</html>
