@@ -2,7 +2,7 @@ services:
   - type: web
     name: vostud-ai
     runtime: python
-    repo: https://github.com/YOUR_USERNAME/vostud-ai
+    repo: https://github.com/defnot67kid-beep/vostud-ai
     plan: free
     region: oregon
     buildCommand: |
