@@ -23,18 +23,15 @@ class Database:
         self.mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
         self.db_name = os.getenv("MONGODB_DB", "vostud_ai")
         
-        # Sync client for non-async operations
         try:
             self.sync_client = MongoClient(self.mongo_uri)
             self.db = self.sync_client[self.db_name]
             
-            # Collections
             self.api_keys = self.db["api_keys"]
             self.usage_logs = self.db["usage_logs"]
             self.users = self.db["users"]
             self.models = self.db["models"]
             
-            # Create indexes
             self._create_indexes()
             
             logger.info("✅ MongoDB Connected!")
@@ -76,11 +73,9 @@ class Database:
     def create_api_key(self, user_id: str, name: str = None, expires_in_days: int = 365):
         """Create a new API key"""
         try:
-            # Generate key
             key = self.generate_api_key()
             hashed_key = self.hash_api_key(key)
             
-            # Create key document
             key_doc = {
                 "key": hashed_key,
                 "key_prefix": key[:10],
@@ -95,7 +90,6 @@ class Database:
                 "daily_usage": []
             }
             
-            # Insert into database
             self.api_keys.insert_one(key_doc)
             
             return {
@@ -109,11 +103,10 @@ class Database:
             return None
     
     def validate_api_key(self, api_key: str) -> dict:
-        """Validate an API key"""
+        """Validate an API key and track usage"""
         try:
             hashed_key = self.hash_api_key(api_key)
             
-            # Find key in database
             key_doc = self.api_keys.find_one({
                 "key": hashed_key,
                 "status": "active"
@@ -122,16 +115,13 @@ class Database:
             if not key_doc:
                 return {"valid": False, "error": "Invalid API key"}
             
-            # Check expiration
             if key_doc["expires_at"] < datetime.utcnow():
-                # Mark as expired
                 self.api_keys.update_one(
                     {"key": hashed_key},
                     {"$set": {"status": "expired"}}
                 )
                 return {"valid": False, "error": "API key expired"}
             
-            # Check rate limit
             today = datetime.utcnow().date()
             daily_usage = [entry for entry in key_doc.get("daily_usage", []) 
                           if entry["date"] == today.isoformat()]
@@ -140,7 +130,7 @@ class Database:
             if today_count >= key_doc.get("rate_limit", 1000):
                 return {"valid": False, "error": "Rate limit exceeded"}
             
-            # Update usage
+            # Update usage - increment usage_count
             self.api_keys.update_one(
                 {"key": hashed_key},
                 {
@@ -156,20 +146,6 @@ class Database:
                 }
             )
             
-            # Log usage with more details
-            self.usage_logs.insert_one({
-                "api_key": hashed_key,
-                "user_id": key_doc["user_id"],
-                "timestamp": datetime.utcnow(),
-                "endpoint": None,
-                "ip": None,
-                "user_agent": None,
-                "model_used": None,
-                "api_used": None,
-                "response_size": 0,
-                "request_size": 0
-            })
-            
             return {
                 "valid": True,
                 "user_id": key_doc["user_id"],
@@ -179,6 +155,69 @@ class Database:
         except Exception as e:
             logger.error(f"❌ Validate API key error: {e}")
             return {"valid": False, "error": str(e)}
+    
+    def log_usage(self, user_id: str, api_key: str = None, endpoint: str = None, 
+                  model_used: str = None, api_used: str = None, 
+                  tokens_used: int = 0, request_size: int = 0, response_size: int = 0,
+                  cost: float = 0.0):
+        """Log API usage for tracking"""
+        try:
+            usage_doc = {
+                "user_id": user_id,
+                "timestamp": datetime.utcnow(),
+                "endpoint": endpoint or "unknown",
+                "model_used": model_used or "unknown",
+                "api_used": api_used or "unknown",
+                "tokens_used": tokens_used,
+                "request_size": request_size,
+                "response_size": response_size,
+                "cost": cost
+            }
+            
+            if api_key:
+                hashed_key = self.hash_api_key(api_key)
+                usage_doc["api_key"] = hashed_key
+            
+            self.usage_logs.insert_one(usage_doc)
+            
+            # Also update daily usage count in API key
+            if api_key:
+                today = datetime.utcnow().date()
+                self.api_keys.update_one(
+                    {"key": hashed_key},
+                    {
+                        "$inc": {"usage_count": 1},
+                        "$push": {
+                            "daily_usage": {
+                                "date": today.isoformat(),
+                                "count": 1,
+                                "timestamp": datetime.utcnow()
+                            }
+                        }
+                    }
+                )
+            
+        except Exception as e:
+            logger.error(f"❌ Log usage error: {e}")
+    
+    def get_key_stats(self, user_id: str) -> dict:
+        """Get API key statistics for a user"""
+        try:
+            # Get all keys for user
+            keys = list(self.api_keys.find({"user_id": user_id}))
+            
+            total_keys = len(keys)
+            active_keys = sum(1 for k in keys if k.get("status") == "active")
+            total_usage = sum(k.get("usage_count", 0) for k in keys)
+            
+            return {
+                "total_keys": total_keys,
+                "active_keys": active_keys,
+                "total_usage": total_usage
+            }
+        except Exception as e:
+            logger.error(f"❌ Get key stats error: {e}")
+            return {"total_keys": 0, "active_keys": 0, "total_usage": 0}
     
     def revoke_api_key(self, api_key: str) -> bool:
         """Revoke an API key"""
@@ -243,16 +282,11 @@ class Database:
             logger.error(f"❌ Create user error: {e}")
             return None
     
-    # ============================================
-    # ANALYTICS METHODS
-    # ============================================
-    
     def get_usage_stats(self, user_id: str, days: int = 30) -> dict:
         """Get usage statistics for a user"""
         try:
             cutoff_date = datetime.utcnow() - timedelta(days=days)
             
-            # Get all usage logs for the user
             logs = list(self.usage_logs.find({
                 "user_id": user_id,
                 "timestamp": {"$gte": cutoff_date}
@@ -266,53 +300,48 @@ class Database:
                     "api_usage": [],
                     "avg_response_size": 0,
                     "avg_request_size": 0,
-                    "total_days": days
+                    "total_days": days,
+                    "total_tokens": 0
                 }
             
-            # Calculate daily usage
             daily_usage = {}
             model_usage = {}
             api_usage = {}
             total_response_size = 0
             total_request_size = 0
+            total_tokens = 0
             total_requests = len(logs)
             
             for log in logs:
-                # Daily usage
                 date_key = log["timestamp"].strftime("%Y-%m-%d")
                 if date_key not in daily_usage:
                     daily_usage[date_key] = 0
                 daily_usage[date_key] += 1
                 
-                # Model usage
                 model = log.get("model_used", "unknown")
                 if model not in model_usage:
                     model_usage[model] = 0
                 model_usage[model] += 1
                 
-                # API usage
                 api = log.get("api_used", "unknown")
                 if api not in api_usage:
                     api_usage[api] = 0
                 api_usage[api] += 1
                 
-                # Size tracking
                 total_response_size += log.get("response_size", 0)
                 total_request_size += log.get("request_size", 0)
+                total_tokens += log.get("tokens_used", 0)
             
-            # Format daily data for charts
             daily_data = [
                 {"date": k, "requests": v}
                 for k, v in sorted(daily_usage.items())
             ]
             
-            # Format model data for charts
             model_data = [
                 {"model": k, "count": v}
                 for k, v in sorted(model_usage.items(), key=lambda x: x[1], reverse=True)
             ]
             
-            # Format API data for charts
             api_data = [
                 {"api": k, "count": v}
                 for k, v in sorted(api_usage.items(), key=lambda x: x[1], reverse=True)
@@ -325,7 +354,8 @@ class Database:
                 "api_usage": api_data,
                 "avg_response_size": round(total_response_size / total_requests, 2) if total_requests > 0 else 0,
                 "avg_request_size": round(total_request_size / total_requests, 2) if total_requests > 0 else 0,
-                "total_days": days
+                "total_days": days,
+                "total_tokens": total_tokens
             }
         except Exception as e:
             logger.error(f"❌ Get usage stats error: {e}")
@@ -347,7 +377,8 @@ class Database:
                 "model_used": log.get("model_used", "unknown"),
                 "api_used": log.get("api_used", "unknown"),
                 "response_size": log.get("response_size", 0),
-                "request_size": log.get("request_size", 0)
+                "request_size": log.get("request_size", 0),
+                "tokens_used": log.get("tokens_used", 0)
             } for log in logs]
         except Exception as e:
             logger.error(f"❌ Get detailed usage error: {e}")
