@@ -1050,7 +1050,7 @@ async def switch_next(
     }
 
 # ============================================
-# ANALYTICS ENDPOINTS
+# ANALYTICS ENDPOINTS (No rate limits)
 # ============================================
 
 @app.get("/analytics/stats")
@@ -1094,7 +1094,7 @@ async def get_analytics_details(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================
-# USAGE ENDPOINTS
+# USAGE ENDPOINTS (No rate limits)
 # ============================================
 
 @app.get("/usage")
