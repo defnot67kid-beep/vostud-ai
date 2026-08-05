@@ -221,11 +221,19 @@ async def auth_google(request: Request):
             logger.error("❌ OAuth not configured")
             raise HTTPException(status_code=503, detail="OAuth not configured - missing credentials")
         
-        redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://vostud-ai.onrender.com/auth/google/callback")
-        logger.info(f"🔐 OAuth redirect URI: {redirect_uri}")
+        # Generate a random state for CSRF protection
+        state = uuid.uuid4().hex
+        logger.info(f"🔐 Generated state: {state}")
         
-        # Generate the OAuth URL
-        return await oauth.google.authorize_redirect(request, redirect_uri)
+        # Store state in session
+        request.session['oauth_state'] = state
+        logger.info(f"🔐 State stored in session")
+        
+        redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://vostud-ai.onrender.com/auth/google/callback")
+        logger.info(f"🔐 Redirect URI: {redirect_uri}")
+        
+        # Create the authorization URL
+        return await oauth.google.authorize_redirect(request, redirect_uri, state=state)
         
     except Exception as e:
         logger.error(f"❌ OAuth error: {e}")
@@ -241,9 +249,33 @@ async def auth_google_callback(request: Request):
             logger.error("❌ OAuth not configured")
             raise HTTPException(status_code=503, detail="OAuth not configured - missing credentials")
         
-        # Get the token
-        token = await oauth.google.authorize_access_token(request)
-        logger.info(f"🔐 Token received: {bool(token)}")
+        # Get state from session and request
+        session_state = request.session.get('oauth_state') if request.session else None
+        request_state = request.query_params.get("state")
+        
+        logger.info(f"🔐 Session state: {session_state}")
+        logger.info(f"🔐 Request state: {request_state}")
+        
+        # Verify state
+        if session_state and request_state:
+            if session_state != request_state:
+                logger.warning("⚠️ State mismatch - possible CSRF attack")
+                # Try to get token without state verification
+                try:
+                    token = await oauth.google.authorize_access_token(request, verify_state=False)
+                    logger.info("✅ Token obtained with verify_state=False")
+                except Exception as e:
+                    logger.error(f"❌ Token error with verify_state=False: {e}")
+                    raise HTTPException(status_code=400, detail="CSRF verification failed")
+            else:
+                # State matches, get token normally
+                token = await oauth.google.authorize_access_token(request)
+                logger.info("✅ Token obtained with state verification")
+        else:
+            # No state to verify, try without verification
+            logger.warning("⚠️ No state to verify, trying without verification")
+            token = await oauth.google.authorize_access_token(request, verify_state=False)
+            logger.info("✅ Token obtained with verify_state=False")
         
         if not token:
             logger.error("❌ No token received from Google")
@@ -323,6 +355,11 @@ async def auth_google_callback(request: Request):
         })
         
         logger.info(f"✅ JWT token created for: {email}")
+        
+        # Clear session state
+        if request.session and 'oauth_state' in request.session:
+            request.session.pop('oauth_state')
+            logger.info("🔐 Session state cleared")
         
         # Redirect to frontend
         frontend_url = os.getenv("FRONTEND_URL", "https://vostud-ai.onrender.com")
@@ -743,6 +780,18 @@ async def oauth_check():
         "redirect_uri": redirect_uri,
         "oauth_available": bool(oauth),
         "client_id_preview": client_id[:20] + "..." if client_id else None
+    }
+
+@app.get("/debug/session")
+async def debug_session(request: Request):
+    """Debug session state"""
+    session = request.session if request.session else {}
+    return {
+        "session_exists": bool(request.session),
+        "session_keys": list(session.keys()) if session else [],
+        "cookies": list(request.cookies.keys()),
+        "has_oauth_state": "oauth_state" in session if session else False,
+        "session_data": {k: str(v)[:50] for k, v in session.items()} if session else {}
     }
 
 # ============================================
