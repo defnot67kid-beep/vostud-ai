@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 from collections import defaultdict
 from fastapi import Request, HTTPException
+from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
