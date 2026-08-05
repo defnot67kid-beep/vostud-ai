@@ -11,6 +11,11 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import uuid
 import mimetypes
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -55,9 +60,9 @@ FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
 if not os.path.exists(FRONTEND_DIR):
     FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
     if not os.path.exists(FRONTEND_DIR):
-        print(f"⚠️ Frontend directory not found at: {FRONTEND_DIR}")
+        logger.warning(f"⚠️ Frontend directory not found at: {FRONTEND_DIR}")
 
-print(f"📁 Frontend directory: {FRONTEND_DIR}")
+logger.info(f"📁 Frontend directory: {FRONTEND_DIR}")
 
 # ============================================
 # IMPORTS
@@ -76,7 +81,8 @@ from app.oauth import (
     GoogleUserInfo,
     decode_access_token,
     SECRET_KEY,
-    ALGORITHM
+    ALGORITHM,
+    ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from authlib.integrations.starlette_client import OAuthError
 
@@ -84,27 +90,31 @@ from authlib.integrations.starlette_client import OAuthError
 # SETUP OAUTH
 # ============================================
 oauth = setup_oauth(app)
+if oauth:
+    logger.info("✅ OAuth setup complete")
+else:
+    logger.warning("⚠️ OAuth setup failed - check Google credentials")
 
 # ============================================
 # INITIALIZE ENGINES
 # ============================================
-print("🚀 Starting Vostud AI...")
+logger.info("🚀 Starting Vostud AI...")
 
 # Database
 db = None
 try:
     db = Database()
-    print("✅ Database connected successfully")
+    logger.info("✅ Database connected successfully")
 except Exception as e:
-    print(f"❌ Database connection failed: {e}")
+    logger.error(f"❌ Database connection failed: {e}")
 
 # RAG Engine
 rag_engine = None
 try:
     rag_engine = RAGEngine()
-    print(f"✅ RAG Engine initialized with {rag_engine.count()} documents")
+    logger.info(f"✅ RAG Engine initialized with {rag_engine.count()} documents")
 except Exception as e:
-    print(f"❌ RAG Engine failed: {e}")
+    logger.error(f"❌ RAG Engine failed: {e}")
 
 # Chat Engine
 chat_engine = None
@@ -112,9 +122,9 @@ try:
     chat_engine = SmartAIEngine()
     if rag_engine:
         chat_engine.rag = rag_engine
-    print(f"✅ Chat Engine initialized")
+    logger.info("✅ Chat Engine initialized")
 except Exception as e:
-    print(f"❌ Chat Engine failed: {e}")
+    logger.error(f"❌ Chat Engine failed: {e}")
 
 # ============================================
 # PYDANTIC MODELS
@@ -200,66 +210,109 @@ async def serve_index():
     raise HTTPException(status_code=404, detail="index.html not found")
 
 # ============================================
-# OAUTH ROUTES
+# OAUTH ROUTES (With comprehensive error handling)
 # ============================================
 
 @app.get("/auth/google")
 async def auth_google(request: Request):
     """Redirect to Google OAuth"""
-    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://vostud-ai.onrender.com/auth/google/callback")
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    try:
+        if not oauth:
+            logger.error("❌ OAuth not configured")
+            raise HTTPException(status_code=503, detail="OAuth not configured - missing credentials")
+        
+        redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://vostud-ai.onrender.com/auth/google/callback")
+        logger.info(f"🔐 OAuth redirect URI: {redirect_uri}")
+        
+        # Generate the OAuth URL
+        return await oauth.google.authorize_redirect(request, redirect_uri)
+        
+    except Exception as e:
+        logger.error(f"❌ OAuth error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"OAuth error: {str(e)}")
 
 @app.get("/auth/google/callback")
 async def auth_google_callback(request: Request):
     """Google OAuth callback"""
     try:
-        # Get user info from Google
-        token = await oauth.google.authorize_access_token(request)
-        user_info = token.get('userinfo')
+        if not oauth:
+            logger.error("❌ OAuth not configured")
+            raise HTTPException(status_code=503, detail="OAuth not configured - missing credentials")
         
+        # Get the token
+        token = await oauth.google.authorize_access_token(request)
+        logger.info(f"🔐 Token received: {bool(token)}")
+        
+        if not token:
+            logger.error("❌ No token received from Google")
+            raise HTTPException(status_code=400, detail="No token received from Google")
+        
+        # Get user info
+        user_info = token.get('userinfo')
         if not user_info:
-            raise HTTPException(status_code=400, detail="Failed to get user info")
+            logger.error("❌ No user info in token")
+            logger.error(f"Token contents: {token.keys()}")
+            raise HTTPException(status_code=400, detail="Failed to get user info from Google")
+        
+        logger.info(f"👤 User info: {user_info.get('email')}")
         
         # Extract user data
         email = user_info.get('email')
-        name = user_info.get('name', email.split('@')[0])
+        name = user_info.get('name', email.split('@')[0] if email else 'User')
         picture = user_info.get('picture')
         given_name = user_info.get('given_name', name)
         family_name = user_info.get('family_name', '')
         
+        if not email:
+            logger.error("❌ No email in user info")
+            raise HTTPException(status_code=400, detail="No email in user info")
+        
         # Check if user exists in database
+        user_id = None
         if db:
-            existing_user = db.users.find_one({"email": email})
-            
-            if not existing_user:
-                # Create new user
-                user_doc = {
-                    "email": email,
-                    "username": name,
-                    "display_name": name,
-                    "picture": picture,
-                    "given_name": given_name,
-                    "family_name": family_name,
-                    "created_at": datetime.utcnow(),
-                    "auth_provider": "google",
-                    "api_keys": []
-                }
-                db.users.insert_one(user_doc)
-                user_id = str(user_doc["_id"])
-            else:
-                user_id = str(existing_user["_id"])
-                # Update user info if changed
-                db.users.update_one(
-                    {"_id": existing_user["_id"]},
-                    {"$set": {
+            try:
+                existing_user = db.users.find_one({"email": email})
+                
+                if not existing_user:
+                    # Create new user
+                    user_doc = {
+                        "email": email,
+                        "username": name,
                         "display_name": name,
                         "picture": picture,
+                        "given_name": given_name,
+                        "family_name": family_name,
+                        "created_at": datetime.utcnow(),
+                        "auth_provider": "google",
                         "last_login": datetime.utcnow()
-                    }}
-                )
+                    }
+                    result = db.users.insert_one(user_doc)
+                    user_id = str(result.inserted_id)
+                    logger.info(f"✅ New user created: {email}")
+                else:
+                    user_id = str(existing_user["_id"])
+                    # Update user info
+                    db.users.update_one(
+                        {"_id": existing_user["_id"]},
+                        {"$set": {
+                            "display_name": name,
+                            "picture": picture,
+                            "last_login": datetime.utcnow(),
+                            "given_name": given_name,
+                            "family_name": family_name
+                        }}
+                    )
+                    logger.info(f"✅ Existing user logged in: {email}")
+            except Exception as e:
+                logger.error(f"❌ Database error: {e}")
+                # Fallback: generate a user ID
+                user_id = f"user_{uuid.uuid4().hex[:8]}"
         else:
             # Fallback if database not available
             user_id = f"user_{uuid.uuid4().hex[:8]}"
+            logger.warning(f"⚠️ Database not available, using fallback user_id: {user_id}")
         
         # Create JWT token
         access_token = create_access_token({
@@ -269,11 +322,14 @@ async def auth_google_callback(request: Request):
             "picture": picture or ""
         })
         
-        # Redirect to frontend with token
+        logger.info(f"✅ JWT token created for: {email}")
+        
+        # Redirect to frontend
         frontend_url = os.getenv("FRONTEND_URL", "https://vostud-ai.onrender.com")
+        redirect_url = f"{frontend_url}/platform"
         
         # Set cookie and redirect
-        response = RedirectResponse(url=f"{frontend_url}/platform")
+        response = RedirectResponse(url=redirect_url)
         response.set_cookie(
             key="access_token",
             value=access_token,
@@ -286,8 +342,12 @@ async def auth_google_callback(request: Request):
         return response
         
     except OAuthError as e:
+        logger.error(f"❌ OAuth error: {e}")
         raise HTTPException(status_code=400, detail=f"OAuth error: {str(e)}")
     except Exception as e:
+        logger.error(f"❌ Callback error: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
 
 @app.get("/auth/me")
@@ -456,6 +516,7 @@ async def chat(
             model_used=model_used
         )
     except Exception as e:
+        logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/public")
@@ -476,6 +537,7 @@ async def chat_public(
         
         return {"response": response}
     except Exception as e:
+        logger.error(f"Public chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================
@@ -517,6 +579,7 @@ async def upload_document(
             "message": f"Added {num_chunks} chunks to knowledge base"
         }
     except Exception as e:
+        logger.error(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/add-text")
@@ -539,6 +602,7 @@ async def add_text(
             "message": f"Added {num_chunks} chunks to knowledge base"
         }
     except Exception as e:
+        logger.error(f"Add text error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================
@@ -561,6 +625,7 @@ async def generate_quiz(
         )
         return {"quiz": quiz}
     except Exception as e:
+        logger.error(f"Quiz error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================
@@ -579,6 +644,7 @@ async def get_stats(
         count = rag_engine.count()
         return {"total_documents": count, "status": "available"}
     except Exception as e:
+        logger.error(f"Stats error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================
@@ -663,6 +729,21 @@ async def test_database():
         return {"status": "success", "message": "Database connected"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/oauth-check")
+async def oauth_check():
+    """Check OAuth configuration"""
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+    
+    return {
+        "client_id_configured": bool(client_id),
+        "client_secret_configured": bool(client_secret),
+        "redirect_uri": redirect_uri,
+        "oauth_available": bool(oauth),
+        "client_id_preview": client_id[:20] + "..." if client_id else None
+    }
 
 # ============================================
 # FALLBACK FOR 404 - Serve frontend
