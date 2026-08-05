@@ -122,28 +122,10 @@ class Database:
                 )
                 return {"valid": False, "error": "API key expired"}
             
-            today = datetime.utcnow().date()
-            daily_usage = [entry for entry in key_doc.get("daily_usage", []) 
-                          if entry["date"] == today.isoformat()]
-            
-            today_count = sum(entry["count"] for entry in daily_usage)
-            if today_count >= key_doc.get("rate_limit", 1000):
-                return {"valid": False, "error": "Rate limit exceeded"}
-            
-            # Update usage - increment usage_count
+            # Update last_used
             self.api_keys.update_one(
                 {"key": hashed_key},
-                {
-                    "$set": {"last_used": datetime.utcnow()},
-                    "$inc": {"usage_count": 1},
-                    "$push": {
-                        "daily_usage": {
-                            "date": today.isoformat(),
-                            "count": 1,
-                            "timestamp": datetime.utcnow()
-                        }
-                    }
-                }
+                {"$set": {"last_used": datetime.utcnow()}}
             )
             
             return {
@@ -162,6 +144,16 @@ class Database:
                   cost: float = 0.0):
         """Log API usage for tracking"""
         try:
+            # Count usage for API key
+            if api_key:
+                hashed_key = self.hash_api_key(api_key)
+                # Increment usage_count on the API key
+                self.api_keys.update_one(
+                    {"key": hashed_key},
+                    {"$inc": {"usage_count": 1}}
+                )
+            
+            # Insert usage log
             usage_doc = {
                 "user_id": user_id,
                 "timestamp": datetime.utcnow(),
@@ -180,22 +172,7 @@ class Database:
             
             self.usage_logs.insert_one(usage_doc)
             
-            # Also update daily usage count in API key
-            if api_key:
-                today = datetime.utcnow().date()
-                self.api_keys.update_one(
-                    {"key": hashed_key},
-                    {
-                        "$inc": {"usage_count": 1},
-                        "$push": {
-                            "daily_usage": {
-                                "date": today.isoformat(),
-                                "count": 1,
-                                "timestamp": datetime.utcnow()
-                            }
-                        }
-                    }
-                )
+            logger.info(f"📊 Usage logged: {user_id} - {endpoint} - {tokens_used} tokens")
             
         except Exception as e:
             logger.error(f"❌ Log usage error: {e}")
@@ -203,7 +180,6 @@ class Database:
     def get_key_stats(self, user_id: str) -> dict:
         """Get API key statistics for a user"""
         try:
-            # Get all keys for user
             keys = list(self.api_keys.find({"user_id": user_id}))
             
             total_keys = len(keys)
@@ -213,11 +189,17 @@ class Database:
             return {
                 "total_keys": total_keys,
                 "active_keys": active_keys,
-                "total_usage": total_usage
+                "total_usage": total_usage,
+                "keys": [{
+                    "key_prefix": k.get("key_prefix"),
+                    "name": k.get("name"),
+                    "status": k.get("status"),
+                    "usage_count": k.get("usage_count", 0)
+                } for k in keys]
             }
         except Exception as e:
             logger.error(f"❌ Get key stats error: {e}")
-            return {"total_keys": 0, "active_keys": 0, "total_usage": 0}
+            return {"total_keys": 0, "active_keys": 0, "total_usage": 0, "keys": []}
     
     def revoke_api_key(self, api_key: str) -> bool:
         """Revoke an API key"""
@@ -383,3 +365,51 @@ class Database:
         except Exception as e:
             logger.error(f"❌ Get detailed usage error: {e}")
             return []
+    
+    def get_user_usage_summary(self, user_id: str) -> dict:
+        """Get a summary of user usage for the dashboard"""
+        try:
+            # Total usage ever
+            total_usage = self.usage_logs.count_documents({"user_id": user_id})
+            
+            # Last 24 hours
+            cutoff_24h = datetime.utcnow() - timedelta(hours=24)
+            last_24h = self.usage_logs.count_documents({
+                "user_id": user_id,
+                "timestamp": {"$gte": cutoff_24h}
+            })
+            
+            # Last 30 days tokens
+            cutoff_30d = datetime.utcnow() - timedelta(days=30)
+            pipeline = [
+                {"$match": {
+                    "user_id": user_id,
+                    "timestamp": {"$gte": cutoff_30d}
+                }},
+                {"$group": {
+                    "_id": None,
+                    "total_tokens": {"$sum": "$tokens_used"}
+                }}
+            ]
+            result = list(self.usage_logs.aggregate(pipeline))
+            total_tokens = result[0].get("total_tokens", 0) if result else 0
+            
+            # API key stats
+            keys = list(self.api_keys.find({"user_id": user_id}))
+            
+            return {
+                "total_requests": total_usage,
+                "last_24h": last_24h,
+                "total_tokens": total_tokens,
+                "total_keys": len(keys),
+                "active_keys": sum(1 for k in keys if k.get("status") == "active")
+            }
+        except Exception as e:
+            logger.error(f"❌ Get user usage summary error: {e}")
+            return {
+                "total_requests": 0,
+                "last_24h": 0,
+                "total_tokens": 0,
+                "total_keys": 0,
+                "active_keys": 0
+            }
