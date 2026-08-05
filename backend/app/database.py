@@ -53,6 +53,8 @@ class Database:
             self.usage_logs.create_index("api_key")
             self.usage_logs.create_index("timestamp")
             self.usage_logs.create_index("user_id")
+            self.usage_logs.create_index("model_used")
+            self.usage_logs.create_index("api_used")
             
             self.users.create_index("email", unique=True)
             self.users.create_index("username", unique=True)
@@ -154,14 +156,18 @@ class Database:
                 }
             )
             
-            # Log usage
+            # Log usage with more details
             self.usage_logs.insert_one({
                 "api_key": hashed_key,
                 "user_id": key_doc["user_id"],
                 "timestamp": datetime.utcnow(),
                 "endpoint": None,
                 "ip": None,
-                "user_agent": None
+                "user_agent": None,
+                "model_used": None,
+                "api_used": None,
+                "response_size": 0,
+                "request_size": 0
             })
             
             return {
@@ -236,3 +242,113 @@ class Database:
         except Exception as e:
             logger.error(f"❌ Create user error: {e}")
             return None
+    
+    # ============================================
+    # ANALYTICS METHODS
+    # ============================================
+    
+    def get_usage_stats(self, user_id: str, days: int = 30) -> dict:
+        """Get usage statistics for a user"""
+        try:
+            cutoff_date = datetime.utcnow() - timedelta(days=days)
+            
+            # Get all usage logs for the user
+            logs = list(self.usage_logs.find({
+                "user_id": user_id,
+                "timestamp": {"$gte": cutoff_date}
+            }).sort("timestamp", -1))
+            
+            if not logs:
+                return {
+                    "total_requests": 0,
+                    "daily_usage": [],
+                    "model_usage": [],
+                    "api_usage": [],
+                    "avg_response_size": 0,
+                    "avg_request_size": 0,
+                    "total_days": days
+                }
+            
+            # Calculate daily usage
+            daily_usage = {}
+            model_usage = {}
+            api_usage = {}
+            total_response_size = 0
+            total_request_size = 0
+            total_requests = len(logs)
+            
+            for log in logs:
+                # Daily usage
+                date_key = log["timestamp"].strftime("%Y-%m-%d")
+                if date_key not in daily_usage:
+                    daily_usage[date_key] = 0
+                daily_usage[date_key] += 1
+                
+                # Model usage
+                model = log.get("model_used", "unknown")
+                if model not in model_usage:
+                    model_usage[model] = 0
+                model_usage[model] += 1
+                
+                # API usage
+                api = log.get("api_used", "unknown")
+                if api not in api_usage:
+                    api_usage[api] = 0
+                api_usage[api] += 1
+                
+                # Size tracking
+                total_response_size += log.get("response_size", 0)
+                total_request_size += log.get("request_size", 0)
+            
+            # Format daily data for charts
+            daily_data = [
+                {"date": k, "requests": v}
+                for k, v in sorted(daily_usage.items())
+            ]
+            
+            # Format model data for charts
+            model_data = [
+                {"model": k, "count": v}
+                for k, v in sorted(model_usage.items(), key=lambda x: x[1], reverse=True)
+            ]
+            
+            # Format API data for charts
+            api_data = [
+                {"api": k, "count": v}
+                for k, v in sorted(api_usage.items(), key=lambda x: x[1], reverse=True)
+            ]
+            
+            return {
+                "total_requests": total_requests,
+                "daily_usage": daily_data,
+                "model_usage": model_data,
+                "api_usage": api_data,
+                "avg_response_size": round(total_response_size / total_requests, 2) if total_requests > 0 else 0,
+                "avg_request_size": round(total_request_size / total_requests, 2) if total_requests > 0 else 0,
+                "total_days": days
+            }
+        except Exception as e:
+            logger.error(f"❌ Get usage stats error: {e}")
+            return {"error": str(e)}
+    
+    def get_detailed_usage(self, user_id: str, days: int = 30) -> list:
+        """Get detailed usage logs for a user"""
+        try:
+            cutoff_date = datetime.utcnow() - timedelta(days=days)
+            
+            logs = list(self.usage_logs.find({
+                "user_id": user_id,
+                "timestamp": {"$gte": cutoff_date}
+            }).sort("timestamp", -1).limit(100))
+            
+            return [{
+                "timestamp": log["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
+                "endpoint": log.get("endpoint", "unknown"),
+                "model_used": log.get("model_used", "unknown"),
+                "api_used": log.get("api_used", "unknown"),
+                "response_size": log.get("response_size", 0),
+                "request_size": log.get("request_size", 0)
+            } for log in logs]
+        except Exception as e:
+            logger.error(f"❌ Get detailed usage error: {e}")
+            return []
