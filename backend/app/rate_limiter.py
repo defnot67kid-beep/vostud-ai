@@ -19,30 +19,35 @@ import logging
 logger = logging.getLogger(__name__)
 
 # ============================================
-# RATE LIMIT CONFIGURATION
+# RATE LIMIT CONFIGURATION - REASONABLE TIERS
 # ============================================
 
-# Default limits per user tier
 TIER_LIMITS = {
     "free": {
+        "requests_per_minute": 10,
+        "requests_per_10min": 10,
         "requests_per_hour": 50,
-        "requests_per_day": 500,
-        "tokens_per_month": 100000,
-        "concurrent_requests": 5,
+        "requests_per_day": 200,
+        "tokens_per_month": 50000,
+        "concurrent_requests": 3,
         "chat_per_minute": 10
     },
     "pro": {
+        "requests_per_minute": 30,
+        "requests_per_10min": 50,
         "requests_per_hour": 200,
-        "requests_per_day": 5000,
-        "tokens_per_month": 1000000,
-        "concurrent_requests": 20,
+        "requests_per_day": 1000,
+        "tokens_per_month": 250000,
+        "concurrent_requests": 10,
         "chat_per_minute": 30
     },
     "enterprise": {
-        "requests_per_hour": 1000,
-        "requests_per_day": 25000,
-        "tokens_per_month": 10000000,
-        "concurrent_requests": 100,
+        "requests_per_minute": 60,
+        "requests_per_10min": 200,
+        "requests_per_hour": 500,
+        "requests_per_day": 5000,
+        "tokens_per_month": 1000000,
+        "concurrent_requests": 25,
         "chat_per_minute": 60
     }
 }
@@ -71,7 +76,6 @@ EXCLUDED_PATHS = [
     "/platform",
     "/",
     "/index.html",
-    "/platform",
     "/static"
 ]
 
@@ -84,8 +88,8 @@ class TokenUsageTracker:
     
     def __init__(self, db=None):
         self.db = db
-        self._cache = {}  # In-memory cache for fast lookups
-        self._cache_ttl = 60  # Cache TTL in seconds
+        self._cache = {}
+        self._cache_ttl = 60
         self._cache_timestamps = {}
     
     def _get_cache_key(self, user_id: str, period: str = "month") -> str:
@@ -101,13 +105,10 @@ class TokenUsageTracker:
         try:
             cache_key = self._get_cache_key(user_id, period)
             
-            # Check cache
             if self._is_cache_valid(cache_key) and cache_key in self._cache:
                 return self._cache[cache_key]
             
-            # Get from database
             if self.db:
-                # Get usage logs for the period
                 cutoff_date = datetime.utcnow()
                 if period == "day":
                     cutoff_date -= timedelta(days=1)
@@ -118,7 +119,6 @@ class TokenUsageTracker:
                 else:
                     cutoff_date -= timedelta(days=30)
                 
-                # Aggregate token usage from logs
                 pipeline = [
                     {"$match": {
                         "user_id": user_id,
@@ -147,7 +147,6 @@ class TokenUsageTracker:
                         "cost": 0.0
                     }
                 
-                # Cache the result
                 self._cache[cache_key] = usage_data
                 self._cache_timestamps[cache_key] = time.time()
                 
@@ -162,7 +161,6 @@ class TokenUsageTracker:
     async def track_usage(self, user_id: str, tokens_used: int, model: str = "unknown", api: str = "unknown", cost: float = 0.0):
         """Track token usage for a request"""
         try:
-            # Invalidate cache
             cache_keys = [
                 self._get_cache_key(user_id, "day"),
                 self._get_cache_key(user_id, "week"),
@@ -174,7 +172,6 @@ class TokenUsageTracker:
                 if key in self._cache_timestamps:
                     del self._cache_timestamps[key]
             
-            # Store in database
             if self.db:
                 self.db.usage_logs.insert_one({
                     "user_id": user_id,
@@ -192,16 +189,14 @@ class TokenUsageTracker:
     async def check_limit(self, user_id: str, tier: str = "free") -> Tuple[bool, str]:
         """Check if user has exceeded their token limit"""
         try:
-            # Get usage for the month
             usage = await self.get_usage(user_id, "month")
-            monthly_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get("tokens_per_month", 100000)
+            monthly_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get("tokens_per_month", 50000)
             
             if usage["tokens_used"] >= monthly_limit:
                 return False, f"Monthly token limit exceeded ({monthly_limit} tokens). Upgrade your plan."
             
-            # Check daily limit
             daily_usage = await self.get_usage(user_id, "day")
-            daily_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get("requests_per_day", 500)
+            daily_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get("requests_per_day", 200)
             
             if daily_usage["requests"] >= daily_limit:
                 return False, f"Daily request limit exceeded ({daily_limit} requests per day)."
@@ -216,7 +211,6 @@ class TokenUsageTracker:
 # RATE LIMITER SETUP
 # ============================================
 
-# Create rate limiter
 limiter = Limiter(key_func=get_remote_address, default_limits=["100 per hour"])
 token_tracker = TokenUsageTracker()
 
@@ -236,12 +230,9 @@ class RateLimitMiddleware:
         self.excluded_paths = EXCLUDED_PATHS
     
     def _is_excluded_path(self, path: str) -> bool:
-        """Check if the path should be excluded from rate limiting"""
-        # Exact match
         if path in self.excluded_paths:
             return True
         
-        # Check if path starts with any excluded path (for /static/*, /platform/*, etc.)
         for excluded in self.excluded_paths:
             if path.startswith(excluded + "/") or path.startswith(excluded + "?"):
                 return True
@@ -256,12 +247,10 @@ class RateLimitMiddleware:
         request = Request(scope, receive)
         path = request.url.path
         
-        # Skip rate limiting for excluded paths
         if self._is_excluded_path(path):
             await self.app(scope, receive, send)
             return
         
-        # Extract user ID from auth
         user_id = None
         api_key = request.headers.get("X-API-Key")
         if api_key and self.db:
@@ -270,7 +259,6 @@ class RateLimitMiddleware:
                 key_doc = self.db.api_keys.find_one({"key": hashed_key})
                 if key_doc:
                     user_id = key_doc.get("user_id")
-                    # Get user tier
                     user = self.db.users.find_one({"_id": user_id})
                     if user:
                         tier = user.get("tier", "free")
@@ -279,20 +267,16 @@ class RateLimitMiddleware:
                 pass
         
         if not user_id:
-            # Use IP address as fallback
             user_id = get_remote_address(request)
             self.user_tiers[user_id] = "free"
         
-        # Store user_id in request state for later use
         request.state.user_id = user_id
         request.state.rate_key = user_id
         request.state.tier = self.user_tiers.get(user_id, "free")
         
-        # Check rate limits
         tier = self.user_tiers.get(user_id, "free")
         limits = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
         
-        # Check per-minute limit
         minute_key = f"{user_id}:{int(time.time() / 60)}"
         if minute_key in self.request_counts:
             self.request_counts[minute_key] = [t for t in self.request_counts[minute_key] if time.time() - t < 60]
@@ -308,5 +292,4 @@ class RateLimitMiddleware:
         
         self.request_counts[minute_key].append(time.time())
         
-        # Proceed with the request
         await self.app(scope, receive, send)
