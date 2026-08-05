@@ -938,9 +938,11 @@ async def add_text(
     metadata: Optional[Dict] = None,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
+    """Add raw text to the knowledge base"""
     if not rag_engine:
         raise HTTPException(status_code=400, detail="RAG engine not available")
     
+    # Check for profanity
     if contains_profanity(text):
         raise HTTPException(
             status_code=400, 
@@ -953,3 +955,9 @@ async def add_text(
         num_chunks = rag_engine.add_text(text, metadata or {"user_id": user_id})
         return {
             "status": "success",
+            "chunks_processed": num_chunks,
+            "message": f"Added {num_chunks} chunks to knowledge base"
+        }
+    except Exception as e:
+        logger.error(f"Add text error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
