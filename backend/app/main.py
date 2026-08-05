@@ -141,6 +141,7 @@ class ChatResponse(BaseModel):
     response: str
     api_used: Optional[str] = None
     model_used: Optional[str] = None
+    mode: Optional[str] = None
 
 class QuizRequest(BaseModel):
     topic: str
@@ -159,6 +160,13 @@ class CreateKeyResponse(BaseModel):
     key_prefix: str
     user_id: str
     expires_at: str
+
+class ModeSwitchRequest(BaseModel):
+    mode: str  # coding, research, organize, compare, summary
+
+class ModeSwitchResponse(BaseModel):
+    mode: str
+    message: str
 
 # ============================================
 # FRONTEND ROUTES
@@ -211,7 +219,7 @@ async def serve_index():
     raise HTTPException(status_code=404, detail="index.html not found")
 
 # ============================================
-# OAUTH ROUTES (With comprehensive error handling)
+# OAUTH ROUTES
 # ============================================
 
 @app.get("/auth/google")
@@ -408,7 +416,7 @@ async def auth_logout():
     return response
 
 # ============================================
-# API KEY ENDPOINTS (with OAuth support and auto-user-creation)
+# API KEY ENDPOINTS
 # ============================================
 
 @app.post("/keys/generate", response_model=CreateKeyResponse)
@@ -663,7 +671,8 @@ async def chat(
         return ChatResponse(
             response=response,
             api_used=chat_engine.current_api,
-            model_used=model_used
+            model_used=model_used,
+            mode=chat_engine.get_current_mode() if chat_engine else "coding"
         )
     except Exception as e:
         logger.error(f"Chat error: {e}")
@@ -689,6 +698,78 @@ async def chat_public(
     except Exception as e:
         logger.error(f"Public chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================
+# RESEARCH MODE ENDPOINTS
+# ============================================
+
+@app.post("/mode/research")
+async def enable_research_mode(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Enable research mode"""
+    if not chat_engine:
+        raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    result = chat_engine.enable_research_mode()
+    return {"message": result, "mode": "research"}
+
+@app.post("/mode/organize")
+async def enable_organize_mode(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Enable organization mode"""
+    if not chat_engine:
+        raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    result = chat_engine.set_organization_mode()
+    return {"message": result, "mode": "organize"}
+
+@app.post("/mode/compare")
+async def enable_compare_mode(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Enable comparison mode"""
+    if not chat_engine:
+        raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    result = chat_engine.set_comparison_mode()
+    return {"message": result, "mode": "compare"}
+
+@app.post("/mode/summary")
+async def enable_summary_mode(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Enable summary mode"""
+    if not chat_engine:
+        raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    result = chat_engine.set_summary_mode()
+    return {"message": result, "mode": "summary"}
+
+@app.post("/mode/coding")
+async def enable_coding_mode(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Reset to coding mode"""
+    if not chat_engine:
+        raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    result = chat_engine.reset_to_coding_mode()
+    return {"message": result, "mode": "coding"}
+
+@app.get("/mode/current")
+async def get_current_mode(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get current mode"""
+    if not chat_engine:
+        raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    return {
+        "mode": chat_engine.get_current_mode(),
+        "research_mode": chat_engine.research_mode
+    }
 
 # ============================================
 # UPLOAD ENDPOINTS
