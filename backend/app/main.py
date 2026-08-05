@@ -408,7 +408,7 @@ async def auth_logout():
     return response
 
 # ============================================
-# API KEY ENDPOINTS (with OAuth support)
+# API KEY ENDPOINTS (with OAuth support and auto-user-creation)
 # ============================================
 
 @app.post("/keys/generate", response_model=CreateKeyResponse)
@@ -416,13 +416,17 @@ async def generate_api_key(
     request: CreateKeyRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Generate a new API key"""
+    """Generate a new API key - auto-creates user if not found"""
     try:
         if not db:
             logger.error("❌ Database not available")
             raise HTTPException(status_code=503, detail="Database not available")
         
+        # Get user info from auth
         user_id = auth.get("user_id") or auth.get("sub")
+        email = auth.get("email")
+        name = auth.get("name") or "User"
+        
         if not user_id:
             logger.error("❌ User ID not found in auth")
             raise HTTPException(status_code=400, detail="User ID not found")
@@ -431,12 +435,43 @@ async def generate_api_key(
         logger.info(f"📝 Key name: {request.name}")
         logger.info(f"📅 Expires in: {request.expires_in_days} days")
         
-        # Ensure the user exists in the database
-        user = db.users.find_one({"_id": user_id})
-        if not user:
-            logger.error(f"❌ User not found: {user_id}")
-            raise HTTPException(status_code=404, detail="User not found")
+        # Try to find the user by ID first
+        user = None
+        try:
+            from bson import ObjectId
+            user = db.users.find_one({"_id": ObjectId(user_id)})
+        except:
+            # If ObjectId conversion fails, try as string
+            user = db.users.find_one({"_id": user_id})
         
+        # If user not found by ID, try by email
+        if not user and email:
+            user = db.users.find_one({"email": email})
+            if user:
+                logger.info(f"👤 Found user by email: {email}")
+                user_id = str(user["_id"])
+        
+        # If user still not found, create a new user
+        if not user:
+            logger.warning(f"⚠️ User not found, creating new user: {email or user_id}")
+            
+            # Create user document
+            user_doc = {
+                "email": email or f"{user_id}@temp.user",
+                "username": name,
+                "display_name": name,
+                "created_at": datetime.utcnow(),
+                "auth_provider": "oauth",
+                "last_login": datetime.utcnow()
+            }
+            
+            # Insert the user
+            result = db.users.insert_one(user_doc)
+            user_id = str(result.inserted_id)
+            logger.info(f"✅ New user created with ID: {user_id}")
+            user = user_doc
+        
+        # Now generate the API key for the (now confirmed) user
         result = db.create_api_key(
             user_id=user_id,
             name=request.name or f"Key for {user.get('email', user_id)}",
