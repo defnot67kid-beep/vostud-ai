@@ -3,597 +3,2178 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vostud AI - Ultimate Coding Assistant</title>
+    <title>Vostud AI - Platform Dashboard</title>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Chart.js Data Labels Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
             min-height: 100vh;
-            padding: 20px;
             color: #fff;
+            padding: 20px;
         }
+
         .container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
-            background: rgba(255,255,255,0.05);
-            border-radius: 20px;
-            padding: 30px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1);
         }
-        header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        header h1 {
-            font-size: 2.5em;
-            background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 0 40px rgba(102,126,234,0.3);
-        }
-        header p {
-            color: #aaa;
-            font-size: 1.1em;
-            margin-top: 5px;
-        }
-        .status-bar {
+
+        /* Header */
+        .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(255,255,255,0.05);
-            border-radius: 10px;
-            padding: 12px 20px;
-            margin-bottom: 20px;
-            border: 1px solid rgba(255,255,255,0.05);
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 30px;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 15px;
         }
-        .status-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.9em;
-            color: #aaa;
-        }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-        .status-dot.green { background: #4ade80; }
-        .status-dot.yellow { background: #fbbf24; }
-        .status-dot.red { background: #f87171; }
-        .upload-section {
-            background: rgba(255,255,255,0.05);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            border: 1px solid rgba(255,255,255,0.05);
-        }
-        .upload-section h3 {
-            color: #aaa;
-            margin-bottom: 10px;
-        }
-        .upload-section input[type="file"] {
-            color: #aaa;
-            padding: 10px;
-            border: 1px dashed rgba(255,255,255,0.2);
-            border-radius: 8px;
-            width: 100%;
-            background: transparent;
-        }
-        .upload-section button {
-            margin-top: 10px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            padding: 10px 25px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .upload-section button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 25px rgba(102,126,234,0.4);
-        }
-        #uploadStatus { margin-top: 10px; padding: 10px; border-radius: 5px; }
-        .success { background: rgba(74,222,128,0.2); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
-        .error { background: rgba(248,113,113,0.2); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
-        .model-selector {
-            background: rgba(255,255,255,0.05);
-            padding: 15px 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            border: 1px solid rgba(255,255,255,0.05);
+
+        .header-left {
             display: flex;
             align-items: center;
             gap: 15px;
-            flex-wrap: wrap;
         }
-        .model-selector label {
-            color: #aaa;
-            font-size: 0.9em;
+
+        .header-logo {
+            height: 50px;
+            width: auto;
         }
-        .model-selector select {
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-            border: 1px solid rgba(255,255,255,0.15);
-            padding: 8px 15px;
-            border-radius: 8px;
-            font-size: 0.9em;
-            min-width: 250px;
-            cursor: pointer;
+
+        .header h1 {
+            font-size: 2em;
+            background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-        .model-selector select option {
-            background: #1a1a2e;
-            color: #fff;
-        }
-        .model-selector button {
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-            border: 1px solid rgba(255,255,255,0.15);
-            padding: 8px 18px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.85em;
-            transition: background 0.2s;
-        }
-        .model-selector button:hover {
-            background: rgba(255,255,255,0.2);
-        }
-        .model-selector .model-status {
-            font-size: 0.8em;
-            color: #4ade80;
-            margin-left: auto;
-        }
-        .chat-section {
-            border: 1px solid rgba(255,255,255,0.05);
-            border-radius: 10px;
-            padding: 20px;
-            background: rgba(255,255,255,0.02);
-        }
-        .chat-history {
-            min-height: 400px;
-            max-height: 500px;
-            overflow-y: auto;
-            margin-bottom: 20px;
-            padding: 10px;
-            border-radius: 8px;
-        }
-        .message {
-            margin: 10px 0;
-            padding: 12px 18px;
-            border-radius: 12px;
-            line-height: 1.6;
-            max-width: 85%;
-        }
-        .message.bot {
-            background: rgba(102,126,234,0.15);
-            border: 1px solid rgba(102,126,234,0.1);
-            margin-right: auto;
-        }
-        .message.user {
-            background: rgba(118,75,162,0.2);
-            border: 1px solid rgba(118,75,162,0.1);
-            margin-left: auto;
-        }
-        .message .message-meta {
-            font-size: 0.7em;
-            color: #666;
-            margin-top: 5px;
-        }
-        .input-section {
+
+        .header-actions {
             display: flex;
             gap: 10px;
+            align-items: center;
             flex-wrap: wrap;
         }
-        .input-section textarea {
-            flex: 1;
-            padding: 12px;
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 10px;
-            font-family: inherit;
-            resize: vertical;
-            background: rgba(255,255,255,0.05);
-            color: #fff;
-            min-height: 60px;
-        }
-        .input-section textarea::placeholder {
-            color: #666;
-        }
-        .input-section button {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
+
+        .btn {
+            padding: 10px 20px;
             border: none;
-            padding: 12px 25px;
-            border-radius: 10px;
+            border-radius: 8px;
             cursor: pointer;
             font-weight: 600;
             transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .input-section button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 25px rgba(102,126,234,0.4);
-        }
-        .input-section button.secondary {
-            background: rgba(255,255,255,0.1);
-        }
-        .input-section button.secondary:hover {
-            background: rgba(255,255,255,0.2);
-            box-shadow: none;
-        }
-        .input-section .button-group {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        code {
-            background: rgba(255,255,255,0.05);
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
             font-size: 0.9em;
         }
-        pre {
-            background: rgba(0,0,0,0.3);
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 5px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-danger {
+            background: rgba(248, 113, 113, 0.2);
+            color: #f87171;
+            border: 1px solid rgba(248, 113, 113, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: rgba(248, 113, 113, 0.3);
+        }
+
+        .btn-google {
+            background: #4285F4;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 12px 24px;
+            font-size: 1.1em;
+            width: 100%;
+        }
+
+        .btn-google:hover {
+            background: #357ae8;
+            box-shadow: 0 5px 25px rgba(66, 133, 244, 0.4);
+        }
+
+        /* Auth Container */
+        .auth-container {
+            max-width: 420px;
+            margin: 60px auto;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 40px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .auth-container h2 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 1.8em;
+        }
+
+        .auth-container .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 25px;
+            font-size: 0.95em;
+        }
+
+        .auth-container .divider {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+            color: #666;
+            font-size: 0.85em;
+        }
+
+        .auth-container .divider::before,
+        .auth-container .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .auth-container .divider::before {
+            margin-right: 15px;
+        }
+
+        .auth-container .divider::after {
+            margin-left: 15px;
+        }
+
+        .auth-container input {
+            width: 100%;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 1em;
+        }
+
+        .auth-container input::placeholder {
+            color: #666;
+        }
+
+        .auth-container input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .auth-container .btn {
+            width: 100%;
+            padding: 12px;
+            font-size: 1em;
+        }
+
+        .auth-container .error-msg {
+            color: #f87171;
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(248, 113, 113, 0.1);
+            border-radius: 8px;
+            display: none;
+        }
+
+        .auth-container .user-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            display: block;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Dashboard */
+        .dashboard {
+            display: none;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            text-align: center;
+        }
+
+        .stat-card .number {
+            font-size: 2.5em;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-card .label {
+            color: #aaa;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        /* Card */
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .card h3 {
+            margin-bottom: 15px;
+            color: #ddd;
+        }
+
+        /* API Key Display */
+        .api-key-display {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.3);
             padding: 15px;
             border-radius: 8px;
-            overflow-x: auto;
-            margin: 10px 0;
-            border: 1px solid rgba(255,255,255,0.05);
+            margin: 15px 0;
+            flex-wrap: wrap;
         }
-        .typing-indicator {
+
+        .api-key-display .key-text {
+            font-family: 'Courier New', monospace;
+            font-size: 1.1em;
+            flex: 1;
+            word-break: break-all;
+            color: #4ade80;
+        }
+
+        .api-key-display .copy-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            padding: 5px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .api-key-display .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Keys Table */
+        .keys-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .keys-table th,
+        .keys-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .keys-table th {
+            color: #888;
+            font-weight: 600;
+            font-size: 0.85em;
+            text-transform: uppercase;
+        }
+
+        .keys-table tr:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .status-active {
+            color: #4ade80;
+        }
+        .status-expired {
+            color: #f87171;
+        }
+        .status-revoked {
+            color: #fbbf24;
+        }
+
+        /* Model Selector */
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .model-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .model-item:hover {
+            border-color: rgba(102, 126, 234, 0.5);
+        }
+
+        .model-item.active {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .model-item .model-name {
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        .model-item .model-api {
+            color: #888;
+            font-size: 0.8em;
+        }
+
+        .model-item .model-status {
+            font-size: 0.75em;
+            margin-top: 5px;
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 10px;
+        }
+
+        .model-status.working {
+            background: rgba(74, 222, 128, 0.2);
+            color: #4ade80;
+        }
+
+        .model-status.failed {
+            background: rgba(248, 113, 113, 0.2);
+            color: #f87171;
+        }
+
+        .model-status.untested {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+        }
+
+        /* Upload Section */
+        .upload-area {
+            border: 2px dashed rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            text-align: center;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .upload-area:hover {
+            border-color: rgba(102, 126, 234, 0.5);
+        }
+
+        .upload-area input[type="file"] {
             display: none;
-            padding: 10px;
-            color: #666;
-            font-style: italic;
         }
-        .typing-indicator.active {
+
+        /* Chat Section */
+        .chat-box {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .chat-box .user-msg {
+            color: #667eea;
+        }
+
+        .chat-box .bot-msg {
+            color: #4ade80;
+        }
+
+        .chat-input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-group input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+        }
+
+        .chat-input-group input::placeholder {
+            color: #666;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 10px;
+            overflow-x: auto;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background 0.3s;
+            background: transparent;
+            border: none;
+            color: #aaa;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tab.active {
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
             display: block;
         }
-        ::-webkit-scrollbar {
-            width: 6px;
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            padding: 15px 25px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.9);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: none;
+            z-index: 1000;
+            max-width: 400px;
+            backdrop-filter: blur(10px);
         }
-        ::-webkit-scrollbar-track {
-            background: rgba(255,255,255,0.05);
-            border-radius: 3px;
+
+        .toast.show {
+            display: block;
+            animation: slideUp 0.3s ease;
         }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.15);
-            border-radius: 3px;
+
+        .toast.success {
+            border-color: rgba(74, 222, 128, 0.3);
         }
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(255,255,255,0.25);
+
+        .toast.error {
+            border-color: rgba(248, 113, 113, 0.3);
         }
-        @media (max-width: 600px) {
-            .container { padding: 15px; }
-            header h1 { font-size: 1.8em; }
-            .model-selector { flex-direction: column; align-items: stretch; }
-            .model-selector select { min-width: 100%; }
-            .input-section { flex-direction: column; }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: #1a1a2e;
+            padding: 30px;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .modal h2 {
+            margin-bottom: 20px;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+        }
+
+        .modal .btn {
+            margin-right: 10px;
+        }
+
+        .modal .modal-close {
+            float: right;
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 1.5em;
+            cursor: pointer;
+        }
+
+        .modal .modal-close:hover {
+            color: #fff;
+        }
+
+        /* Loading */
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Analytics specific styles */
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+
+        .chart-container h4 {
+            color: #ddd;
+            margin-bottom: 15px;
+            font-size: 1em;
+        }
+
+        .chart-container canvas {
+            max-height: 250px;
+            max-width: 100%;
+        }
+
+        .stats-overview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px 20px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .stat-box .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-box .stat-label {
+            color: #888;
+            font-size: 0.85em;
+            margin-top: 5px;
+        }
+
+        .analytics-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .analytics-controls select,
+        .analytics-controls button {
+            padding: 8px 15px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .analytics-controls select option {
+            background: #1a1a2e;
+        }
+
+        .analytics-controls button.active {
+            background: rgba(102, 126, 234, 0.2);
+            border-color: #667eea;
+        }
+
+        .chart-type-buttons {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .chart-type-buttons button {
+            padding: 5px 12px;
+            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: transparent;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+
+        .chart-type-buttons button:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .chart-type-buttons button.active {
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+            border-color: #667eea;
+        }
+
+        .usage-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+
+        .usage-table th,
+        .usage-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .usage-table th {
+            color: #888;
+            font-weight: 600;
+            font-size: 0.8em;
+            text-transform: uppercase;
+        }
+
+        .usage-table tr:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .table-container {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .loading-overlay {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 200px;
+            color: #666;
+        }
+
+        .loading-overlay .spinner {
+            width: 30px;
+            height: 30px;
+            margin-right: 10px;
+        }
+
+        /* Usage Bar */
+        .usage-bar-container {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            height: 20px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .usage-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4ade80, #fbbf24, #f87171);
+            border-radius: 8px;
+            transition: width 0.5s ease;
+            width: 0%;
+        }
+
+        .usage-bar-text {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 2px;
+        }
+
+        .tier-badge {
+            display: inline-block;
+            padding: 2px 12px;
+            border-radius: 10px;
+            font-size: 0.7em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .tier-free {
+            background: rgba(74, 222, 128, 0.2);
+            color: #4ade80;
+        }
+
+        .tier-pro {
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+        }
+
+        .tier-enterprise {
+            background: rgba(240, 147, 251, 0.2);
+            color: #f093fb;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .header-actions {
+                width: 100%;
+            }
+            .header-actions .btn {
+                flex: 1;
+                text-align: center;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .keys-table {
+                font-size: 0.8em;
+            }
+            .keys-table th,
+            .keys-table td {
+                padding: 8px 10px;
+            }
+            .auth-container {
+                margin: 30px 15px;
+                padding: 30px 20px;
+            }
+            .api-key-display {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .tabs {
+                flex-direction: row;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+            }
+            .tab {
+                flex-shrink: 0;
+            }
+            .analytics-grid {
+                grid-template-columns: 1fr;
+            }
+            .stats-overview {
+                grid-template-columns: 1fr 1fr;
+            }
+            .analytics-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .stats-overview {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>⚡ Vostud AI</h1>
-            <p>Custom Coding Assistant for Lua, Luau &amp; Python</p>
-        </header>
 
-        <div class="status-bar">
-            <div class="status-item">
-                <span class="status-dot green"></span>
-                <span id="apiStatus">Connected</span>
-            </div>
-            <div class="status-item">
-                🔌 <span id="currentApi">Loading...</span>
-            </div>
-            <div class="status-item">
-                🎯 <span id="currentModel">auto</span>
-            </div>
-            <div class="status-item">
-                📚 <span id="docCount">0</span> docs
-            </div>
-        </div>
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
 
-        <div class="upload-section">
-            <h3>📄 Upload Study Materials</h3>
-            <input type="file" id="fileInput" accept=".pdf,.txt,.lua,.luau">
-            <button id="uploadBtn">Upload Document</button>
-            <div id="uploadStatus"></div>
-        </div>
-
-        <div class="model-selector">
-            <label>🎯 Model:</label>
-            <select id="modelSelect">
-                <option value="auto">🤖 Auto (Best Available)</option>
-            </select>
-            <button id="refreshModelsBtn">🔄 Refresh</button>
-            <button id="nextModelBtn">⏭ Next</button>
-            <button id="toggleAutoBtn">🔁 Auto</button>
-            <span class="model-status" id="modelStatus">✅ Auto mode</span>
-        </div>
-
-        <div class="chat-section">
-            <div class="chat-history" id="chatHistory">
-                <div class="message bot">
-                    <strong>Vostud AI:</strong> Hello! I'm Vostud AI, your custom coding assistant. I specialize in Lua, Luau (Roblox), and Python.
-                    <br><br>
-                    <strong>Features:</strong>
-                    <br>• Upload code files (.lua, .luau, .py, .txt, .pdf)
-                    <br>• Get expert coding help with best practices
-                    <br>• Debug your code with advanced solutions
-                    <br>• Generate quizzes to test your knowledge
-                    <br>• Switch between multiple AI models
-                    <br><br>
-                    What would you like help with today?
+    <!-- Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal()">✕</button>
+            <h2 id="modalTitle">Generate API Key</h2>
+            <form id="modalForm">
+                <input type="text" id="modalKeyName" placeholder="Key Name (e.g., 'My App')">
+                <input type="number" id="modalExpiresDays" placeholder="Expires in days (default: 365)" value="365">
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button type="submit" class="btn btn-primary">Generate</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
                 </div>
-            </div>
-            <div class="typing-indicator" id="typingIndicator">Vostud AI is thinking...</div>
-            <div class="input-section">
-                <textarea id="userInput" rows="2" placeholder="Ask about Lua, Luau, Python, or upload code for debugging..."></textarea>
-                <div class="button-group">
-                    <button id="sendBtn">Send</button>
-                    <button id="quizBtn" class="secondary">📝 Quiz</button>
-                    <button id="debugBtn" class="secondary">🐛 Debug</button>
-                    <button id="clearBtn" class="secondary">🗑 Clear</button>
+            </form>
+            <div id="modalResult" style="margin-top: 15px; display: none;">
+                <p style="color: #4ade80;">✅ Key generated successfully!</p>
+                <div class="api-key-display">
+                    <span class="key-text" id="modalNewKey"></span>
+                    <button class="copy-btn" onclick="copyToClipboard('modalNewKey')">📋 Copy</button>
                 </div>
+                <p style="color: #888; font-size: 0.8em;">Save this key now. It won't be shown again!</p>
             </div>
         </div>
     </div>
 
+    <div class="container">
+
+        <!-- ===== HEADER ===== -->
+        <div class="header">
+            <div class="header-left">
+                <img src="/logo" alt="Vostud AI Logo" class="header-logo" onerror="this.style.display='none'">
+                <h1>⚡ Vostud AI Platform</h1>
+            </div>
+            <div class="header-actions">
+                <span id="userDisplay" style="display: none; color: #aaa; display: flex; align-items: center; gap: 10px;">
+                    <img id="userAvatar" src="" alt="Avatar" style="width: 32px; height: 32px; border-radius: 50%;">
+                    <span id="usernameDisplay"></span>
+                    <span id="userTierBadge" class="tier-badge tier-free">FREE</span>
+                </span>
+                <button class="btn btn-secondary" id="logoutBtn" style="display: none;" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <!-- ===== AUTH CONTAINER ===== -->
+        <div class="auth-container" id="authContainer">
+            <h2>🔑 Welcome to Vostud AI</h2>
+            <p class="subtitle">Sign in to manage your API keys and use the platform</p>
+
+            <button class="btn btn-google" onclick="loginWithGoogle()">
+                <svg width="20" height="20" viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                </svg>
+                Sign in with Google
+            </button>
+
+            <div class="divider">or use API key</div>
+
+            <form id="authForm" style="display: none;">
+                <input type="text" id="authApiKey" placeholder="Enter your API key (vsd-...)" style="margin-bottom: 10px;">
+                <button type="submit" class="btn btn-secondary">Login with API Key</button>
+            </form>
+
+            <div class="error-msg" id="authError"></div>
+
+            <p style="text-align: center; color: #666; font-size: 0.8em; margin-top: 20px;">
+                🔑 API keys can be generated after signing in
+            </p>
+        </div>
+
+        <!-- ===== DASHBOARD ===== -->
+        <div class="dashboard" id="dashboard">
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" data-tab="overview" onclick="switchTab('overview')">📊 Overview</button>
+                <button class="tab" data-tab="keys" onclick="switchTab('keys')">🔑 API Keys</button>
+                <button class="tab" data-tab="models" onclick="switchTab('models')">🤖 Models</button>
+                <button class="tab" data-tab="upload" onclick="switchTab('upload')">📄 Upload</button>
+                <button class="tab" data-tab="chat" onclick="switchTab('chat')">💬 Chat</button>
+                <button class="tab" data-tab="analytics" onclick="switchTab('analytics')">📈 Analytics</button>
+                <button class="tab" data-tab="usage" onclick="switchTab('usage')">📊 Usage</button>
+            </div>
+
+            <!-- ===== TAB: Overview ===== -->
+            <div class="tab-content active" id="tab-overview">
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card">
+                        <div class="number" id="statKeys">0</div>
+                        <div class="label">API Keys</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number" id="statRequests">0</div>
+                        <div class="label">Total Requests</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number" id="statDocs">0</div>
+                        <div class="label">Documents</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number" id="statModels">0</div>
+                        <div class="label">Available Models</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>🚀 Quick Actions</h3>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-primary" onclick="openGenerateKeyModal()">+ Generate API Key</button>
+                        <button class="btn btn-secondary" onclick="switchTab('upload')">📄 Upload Document</button>
+                        <button class="btn btn-secondary" onclick="switchTab('chat')">💬 Chat with AI</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>📊 API Usage</h3>
+                    <div id="usageChart" style="height: 200px; display: flex; align-items: center; justify-content: center; color: #666;">
+                        <span>Loading usage data...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: API Keys ===== -->
+            <div class="tab-content" id="tab-keys">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <h3>🔑 Your API Keys</h3>
+                        <button class="btn btn-primary" onclick="openGenerateKeyModal()">+ Generate New Key</button>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="keys-table" id="keysTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Key</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Expires</th>
+                                    <th>Usage</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="keysTableBody">
+                                <tr>
+                                    <td colspan="7" style="text-align: center; color: #666; padding: 30px;">Loading keys...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: Models ===== -->
+            <div class="tab-content" id="tab-models">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <h3>🤖 Available Models</h3>
+                        <div>
+                            <button class="btn btn-secondary" onclick="setAutoMode(true)">🔁 Auto Mode</button>
+                            <button class="btn btn-secondary" onclick="switchNextModel()">⏭ Next Model</button>
+                            <button class="btn btn-secondary" onclick="refreshModels()">🔄 Refresh</button>
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px; color: #888;" id="currentModelDisplay">
+                        Current model: <strong id="currentModelName">auto</strong>
+                        <span id="autoModeBadge" style="background: rgba(74,222,128,0.2); color: #4ade80; padding: 2px 10px; border-radius: 10px; font-size: 0.8em; margin-left: 10px;">✅ Auto</span>
+                    </div>
+                    <div class="model-grid" id="modelGrid">
+                        <div style="text-align: center; color: #666; padding: 30px; width: 100%;">Loading models...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: Upload ===== -->
+            <div class="tab-content" id="tab-upload">
+                <div class="card">
+                    <h3>📄 Upload Documents</h3>
+                    <p style="color: #888; margin-bottom: 15px;">Upload PDFs, text files, or code files to add to your knowledge base.</p>
+                    <div class="upload-area" id="uploadArea">
+                        <div style="font-size: 3em; margin-bottom: 10px;">📤</div>
+                        <p style="color: #aaa; margin-bottom: 10px;">Drag & drop files here, or click to browse</p>
+                        <p style="color: #666; font-size: 0.8em;">Supported: .pdf, .txt, .lua, .luau</p>
+                        <input type="file" id="fileInput" multiple accept=".pdf,.txt,.lua,.luau">
+                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()" style="margin-top: 15px;">Choose Files</button>
+                    </div>
+                    <div id="uploadProgress" style="display: none; margin-top: 15px;">
+                        <div style="background: rgba(255,255,255,0.05); border-radius: 8px; height: 20px; overflow: hidden;">
+                            <div id="uploadProgressBar" style="background: linear-gradient(90deg, #667eea, #764ba2); height: 100%; width: 0%; transition: width 0.3s;"></div>
+                        </div>
+                        <p style="color: #888; font-size: 0.9em; margin-top: 5px;" id="uploadStatusText">Uploading...</p>
+                    </div>
+                    <div id="uploadedFiles" style="margin-top: 15px;"></div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: Chat ===== -->
+            <div class="tab-content" id="tab-chat">
+                <div class="card">
+                    <h3>💬 Chat with Vostud AI</h3>
+                    <p style="color: #888; margin-bottom: 15px;">Ask questions about your uploaded documents or general coding help.</p>
+                    <div class="chat-box" id="chatBox">
+                        <div class="bot-msg">🤖 Vostud AI: Hello! I'm your coding assistant. Ask me anything about Lua, Luau, Python, or your uploaded documents!</div>
+                    </div>
+                    <div class="chat-input-group">
+                        <input type="text" id="chatInput" placeholder="Ask a question..." onkeypress="if(event.key==='Enter') sendChatMessage()">
+                        <button class="btn btn-primary" onclick="sendChatMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: Analytics ===== -->
+            <div class="tab-content" id="tab-analytics">
+                <div class="card">
+                    <h3>📈 API Usage Analytics</h3>
+                    <p style="color: #888; margin-bottom: 15px;">Track your API usage, model performance, and request patterns.</p>
+                    
+                    <div class="analytics-controls">
+                        <select id="analyticsDays" onchange="loadAnalytics()">
+                            <option value="7">Last 7 days</option>
+                            <option value="30" selected>Last 30 days</option>
+                            <option value="60">Last 60 days</option>
+                            <option value="90">Last 90 days</option>
+                        </select>
+                        
+                        <div class="chart-type-buttons">
+                            <button class="active" data-chart="bar" onclick="switchChartType('bar')">📊 Bar</button>
+                            <button data-chart="line" onclick="switchChartType('line')">📈 Line</button>
+                            <button data-chart="pie" onclick="switchChartType('pie')">🥧 Pie</button>
+                            <button data-chart="doughnut" onclick="switchChartType('doughnut')">🍩 Doughnut</button>
+                            <button data-chart="radar" onclick="switchChartType('radar')">🕸️ Radar</button>
+                        </div>
+                        
+                        <button class="btn btn-secondary" onclick="loadAnalytics()">🔄 Refresh</button>
+                        <button class="btn btn-secondary" onclick="downloadAnalyticsCSV()">📥 Export CSV</button>
+                    </div>
+                    
+                    <div class="stats-overview" id="statsOverview">
+                        <div class="stat-box">
+                            <div class="stat-value" id="totalRequests">0</div>
+                            <div class="stat-label">Total Requests</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="avgResponseSize">0 KB</div>
+                            <div class="stat-label">Avg Response Size</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="avgRequestSize">0 KB</div>
+                            <div class="stat-label">Avg Request Size</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="uniqueModels">0</div>
+                            <div class="stat-label">Models Used</div>
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-grid">
+                        <div class="chart-container">
+                            <h4>📊 Daily Requests</h4>
+                            <canvas id="dailyChart"></canvas>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <h4>🤖 Model Distribution</h4>
+                            <canvas id="modelChart"></canvas>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <h4>🔌 API Distribution</h4>
+                            <canvas id="apiChart"></canvas>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <h4>📦 Request Sizes</h4>
+                            <canvas id="sizeChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="card" style="margin-top: 20px;">
+                        <h4>📋 Detailed Usage Logs</h4>
+                        <div class="table-container">
+                            <table class="usage-table" id="usageLogsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Endpoint</th>
+                                        <th>Model</th>
+                                        <th>API</th>
+                                        <th>Response Size</th>
+                                        <th>Request Size</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usageLogsBody">
+                                    <tr>
+                                        <td colspan="6" style="text-align: center; color: #666; padding: 30px;">Loading logs...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: Usage ===== -->
+            <div class="tab-content" id="tab-usage">
+                <div class="card">
+                    <h3>📊 Usage & Limits</h3>
+                    <p style="color: #888; margin-bottom: 15px;">Track your token usage and rate limits.</p>
+                    
+                    <div class="stats-overview" id="usageStatsOverview">
+                        <div class="stat-box">
+                            <div class="stat-value" id="usageTier">FREE</div>
+                            <div class="stat-label">Your Tier</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="usageTokens">0</div>
+                            <div class="stat-label">Tokens Used (Monthly)</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="usageRequests">0</div>
+                            <div class="stat-label">Requests (Daily)</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="usageRemaining">100%</div>
+                            <div class="stat-label">Remaining</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <h4>📊 Token Usage Progress</h4>
+                        <div style="margin-top: 10px;">
+                            <div style="display: flex; justify-content: space-between; color: #888; font-size: 0.85em;">
+                                <span>Monthly Tokens</span>
+                                <span id="usageTokensText">0 / 50,000</span>
+                            </div>
+                            <div class="usage-bar-container">
+                                <div class="usage-bar" id="usageBar" style="width: 0%;"></div>
+                            </div>
+                            <div class="usage-bar-text" id="usagePercentText">0% used</div>
+                        </div>
+                        
+                        <div style="margin-top: 15px;">
+                            <div style="display: flex; justify-content: space-between; color: #888; font-size: 0.85em;">
+                                <span>Daily Requests</span>
+                                <span id="usageDailyText">0 / 200</span>
+                            </div>
+                            <div class="usage-bar-container">
+                                <div class="usage-bar" id="usageDailyBar" style="width: 0%;"></div>
+                            </div>
+                            <div class="usage-bar-text" id="usageDailyPercent">0% used</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="loadUsageStats()">🔄 Refresh Usage</button>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- end dashboard -->
+
+    </div><!-- end container -->
+
     <script>
-        const API_URL = 'https://vostud-ai.onrender.com';
-        let conversationHistory = [];
-        let currentModel = 'auto';
-        let availableModels = [];
+        // ============================================
+        // CONFIGURATION
+        // ============================================
+        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ?
+            'http://localhost:8000' :
+            'https://vostud-ai.onrender.com';
 
-        const chatHistory = document.getElementById('chatHistory');
-        const userInput = document.getElementById('userInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const fileInput = document.getElementById('fileInput');
-        const uploadStatus = document.getElementById('uploadStatus');
-        const quizBtn = document.getElementById('quizBtn');
-        const debugBtn = document.getElementById('debugBtn');
-        const clearBtn = document.getElementById('clearBtn');
-        const modelSelect = document.getElementById('modelSelect');
-        const refreshModelsBtn = document.getElementById('refreshModelsBtn');
-        const nextModelBtn = document.getElementById('nextModelBtn');
-        const toggleAutoBtn = document.getElementById('toggleAutoBtn');
-        const typingIndicator = document.getElementById('typingIndicator');
-        const apiStatus = document.getElementById('apiStatus');
-        const currentApi = document.getElementById('currentApi');
-        const currentModelDisplay = document.getElementById('currentModel');
-        const docCount = document.getElementById('docCount');
-        const modelStatus = document.getElementById('modelStatus');
+        let authToken = localStorage.getItem('vostud_api_key');
+        let currentUser = null;
+        let isLoginMode = true;
 
-        async function sendMessage() {
-            const message = userInput.value.trim();
-            if (!message) return;
+        // ============================================
+        // CHARTS - Global Variables
+        // ============================================
+        let dailyChart = null;
+        let modelChart = null;
+        let apiChart = null;
+        let sizeChart = null;
+        let currentChartType = 'bar';
+        let analyticsData = null;
 
-            addMessage('user', message);
-            userInput.value = '';
-            showTyping(true);
+        // ============================================
+        // TOAST NOTIFICATIONS
+        // ============================================
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast show ${type}`;
+            clearTimeout(toast._timeout);
+            toast._timeout = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 4000);
+        }
+
+        // ============================================
+        // AUTHENTICATION
+        // ============================================
+
+        function loginWithGoogle() {
+            window.location.href = `${API_URL}/auth/google`;
+        }
+
+        async function checkOAuthSession() {
+            try {
+                const response = await fetch(`${API_URL}/auth/me`, {
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.authenticated) {
+                        currentUser = data.user;
+                        document.getElementById('usernameDisplay').textContent = currentUser.name || currentUser.email;
+                        if (currentUser.picture) {
+                            document.getElementById('userAvatar').src = currentUser.picture;
+                            document.getElementById('userAvatar').style.display = 'inline-block';
+                        }
+                        document.getElementById('userDisplay').style.display = 'flex';
+                        
+                        const tier = currentUser.tier || 'free';
+                        const tierBadge = document.getElementById('userTierBadge');
+                        tierBadge.textContent = tier.toUpperCase();
+                        tierBadge.className = `tier-badge tier-${tier}`;
+                        
+                        showDashboard();
+                        loadDashboardData();
+                        loadUsageStats();
+                        return true;
+                    }
+                }
+            } catch (error) {
+                console.log('No OAuth session');
+            }
+            return false;
+        }
+
+        document.getElementById('authForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const apiKey = document.getElementById('authApiKey').value.trim();
+            const errorEl = document.getElementById('authError');
+
+            if (!apiKey || !apiKey.startsWith('vsd-')) {
+                errorEl.textContent = 'Please enter a valid API key starting with "vsd-"';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            fetch(`${API_URL}/keys`, {
+                headers: { 'X-API-Key': apiKey }
+            }).then(response => {
+                if (response.ok) {
+                    localStorage.setItem('vostud_api_key', apiKey);
+                    authToken = apiKey;
+                    showToast('✅ Logged in successfully!');
+                    checkAuth();
+                } else {
+                    errorEl.textContent = 'Invalid API key. Please check and try again.';
+                    errorEl.style.display = 'block';
+                }
+            }).catch(() => {
+                errorEl.textContent = 'Network error. Please try again.';
+                errorEl.style.display = 'block';
+            });
+        });
+
+        function logout() {
+            localStorage.removeItem('vostud_api_key');
+            authToken = null;
+            currentUser = null;
+
+            fetch(`${API_URL}/auth/logout`, {
+                method: 'POST',
+                credentials: 'include'
+            }).finally(() => {
+                document.getElementById('authContainer').style.display = 'block';
+                document.getElementById('dashboard').style.display = 'none';
+                document.getElementById('logoutBtn').style.display = 'none';
+                document.getElementById('userDisplay').style.display = 'none';
+                showToast('Logged out successfully');
+            });
+        }
+
+        function checkAuth() {
+            const key = localStorage.getItem('vostud_api_key');
+            if (key) {
+                authToken = key;
+                showDashboard();
+                loadDashboardData();
+                loadUsageStats();
+                return;
+            }
+
+            checkOAuthSession().then(authenticated => {
+                if (!authenticated) {
+                    document.getElementById('authContainer').style.display = 'block';
+                    document.getElementById('dashboard').style.display = 'none';
+                    document.getElementById('logoutBtn').style.display = 'none';
+                    document.getElementById('userDisplay').style.display = 'none';
+                }
+            });
+        }
+
+        function showDashboard() {
+            document.getElementById('authContainer').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('logoutBtn').style.display = 'inline-block';
+            document.getElementById('userDisplay').style.display = 'flex';
+            document.getElementById('usernameDisplay').textContent = currentUser?.name || currentUser?.email || 'User';
+            if (currentUser?.picture) {
+                document.getElementById('userAvatar').src = currentUser.picture;
+            }
+        }
+
+        // ============================================
+        // DASHBOARD TABS
+        // ============================================
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+            document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            if (tabName === 'keys') loadKeys();
+            if (tabName === 'models') loadModels();
+            if (tabName === 'overview') loadDashboardData();
+            if (tabName === 'analytics') loadAnalytics();
+            if (tabName === 'usage') loadUsageStats();
+        }
+
+        // ============================================
+        // API HELPERS
+        // ============================================
+        async function apiRequest(endpoint, method = 'GET', body = null) {
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            if (authToken) {
+                headers['X-API-Key'] = authToken;
+            }
+
+            const options = {
+                method,
+                headers,
+                credentials: 'include'
+            };
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+
+            const response = await fetch(`${API_URL}${endpoint}`, options);
+
+            if (response.status === 401) {
+                const oauthCheck = await checkOAuthSession();
+                if (!oauthCheck) {
+                    localStorage.removeItem('vostud_api_key');
+                    authToken = null;
+                    showToast('Session expired. Please login again.', 'error');
+                    checkAuth();
+                    throw new Error('Unauthorized');
+                }
+                return apiRequest(endpoint, method, body);
+            }
+
+            if (response.status === 429) {
+                const data = await response.json();
+                showToast(`⏳ ${data.detail || 'Rate limit exceeded. Please wait.'}`, 'error');
+                throw new Error('Rate limit exceeded');
+            }
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || data.message || 'API error');
+            }
+            return data;
+        }
+
+        // ============================================
+        // LOAD DASHBOARD DATA
+        // ============================================
+        async function loadDashboardData() {
+            try {
+                // Get API keys count
+                const keysData = await apiRequest('/keys');
+                const keysCount = keysData ? keysData.length : 0;
+                document.getElementById('statKeys').textContent = keysCount;
+
+                // Get usage stats
+                const stats = await apiRequest('/keys/stats');
+                document.getElementById('statRequests').textContent = stats.total_requests || 0;
+
+                // Get document stats
+                const docStats = await apiRequest('/knowledge-stats');
+                document.getElementById('statDocs').textContent = docStats.total_documents || 0;
+
+                // Get models count
+                const models = await apiRequest('/models');
+                document.getElementById('statModels').textContent = models.available_models ? models.available_models.length : 0;
+
+                document.getElementById('usageChart').innerHTML = `
+                    <div style="text-align: center;">
+                        <div style="font-size: 2em;">📊</div>
+                        <p style="color: #888; margin-top: 10px;">${stats.total_requests || 0} total requests</p>
+                        <p style="color: #888; font-size: 0.8em;">${stats.last_24h || 0} in the last 24 hours</p>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Failed to load dashboard:', error);
+            }
+        }
+
+        // ============================================
+        // API KEYS
+        // ============================================
+        async function loadKeys() {
+            try {
+                const data = await apiRequest('/keys');
+                const tbody = document.getElementById('keysTableBody');
+
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: #666; padding: 30px;">
+                                No API keys yet. Generate your first key!
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tbody.innerHTML = data.map(key => `
+                    <tr>
+                        <td>${key.name || 'Unnamed'}</td>
+                        <td style="font-family: monospace; font-size: 0.85em;">${key.key_prefix}...</td>
+                        <td><span class="status-${key.status}">${key.status}</span></td>
+                        <td>${new Date(key.created_at).toLocaleDateString()}</td>
+                        <td>${key.expires_at ? new Date(key.expires_at).toLocaleDateString() : 'Never'}</td>
+                        <td>${key.usage_count || 0}</td>
+                        <td>
+                            <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.8em;" onclick="revokeKey('${key.key_prefix}')">
+                                Revoke
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load keys:', error);
+            }
+        }
+
+        function openGenerateKeyModal() {
+            document.getElementById('modalOverlay').classList.add('show');
+            document.getElementById('modalTitle').textContent = '🔑 Generate API Key';
+            document.getElementById('modalResult').style.display = 'none';
+            document.getElementById('modalForm').style.display = 'block';
+            document.getElementById('modalKeyName').value = '';
+            document.getElementById('modalExpiresDays').value = '365';
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('show');
+        }
+
+        document.getElementById('modalForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const name = document.getElementById('modalKeyName').value || 'My API Key';
+            const expiresInDays = parseInt(document.getElementById('modalExpiresDays').value) || 365;
 
             try {
+                const result = await apiRequest('/keys/generate', 'POST', {
+                    name: name,
+                    expires_in_days: expiresInDays
+                });
+
+                document.getElementById('modalForm').style.display = 'none';
+                document.getElementById('modalResult').style.display = 'block';
+                document.getElementById('modalNewKey').textContent = result.api_key;
+
+                showToast('🎉 API Key generated successfully!');
+                loadKeys();
+                loadDashboardData();
+            } catch (error) {
+                showToast('Failed to generate key: ' + error.message, 'error');
+            }
+        });
+
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('📋 Copied to clipboard!');
+            }).catch(() => {
+                const range = document.createRange();
+                const el = document.getElementById(elementId);
+                range.selectNode(el);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                document.execCommand('copy');
+                showToast('📋 Copied to clipboard!');
+            });
+        }
+
+        async function revokeKey(keyPrefix) {
+            if (!confirm(`Are you sure you want to revoke key starting with "${keyPrefix}"?`)) return;
+
+            try {
+                await apiRequest(`/keys/${keyPrefix}`, 'DELETE');
+                showToast('Key revoked successfully');
+                loadKeys();
+                loadDashboardData();
+            } catch (error) {
+                showToast('Failed to revoke key: ' + error.message, 'error');
+            }
+        }
+
+        // ============================================
+        // MODELS
+        // ============================================
+        async function loadModels() {
+            try {
+                const data = await apiRequest('/models');
+                const grid = document.getElementById('modelGrid');
+                const currentModel = data.current_model || 'auto';
+                const autoMode = data.auto_mode;
+
+                document.getElementById('currentModelName').textContent = currentModel;
+                document.getElementById('autoModeBadge').textContent = autoMode ? '✅ Auto' : '🎯 Manual';
+
+                if (!data.available_models || data.available_models.length === 0) {
+                    grid.innerHTML =
+                        `<div style="text-align: center; color: #666; padding: 30px; width: 100%;">No models available</div>`;
+                    return;
+                }
+
+                grid.innerHTML = data.available_models.map(model => {
+                    const isActive = model.key === currentModel || (autoMode && model.status === 'working');
+                    const statusEmoji = model.status === 'working' ? '✅' : model.status === 'failed' ? '❌' : '⏳';
+                    const statusClass = model.status || 'untested';
+                    return `
+                        <div class="model-item ${isActive ? 'active' : ''}" onclick="selectModel('${model.key}')">
+                            <div class="model-name">${statusEmoji} ${model.model}</div>
+                            <div class="model-api">${model.api} • ${model.cost?.tier || 'free'}</div>
+                            <span class="model-status ${statusClass}">${model.status || 'untested'}</span>
+                            ${isActive ? ' <span style="color: #4ade80; font-size: 0.8em;">← Active</span>' : ''}
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Failed to load models:', error);
+            }
+        }
+
+        async function selectModel(modelKey) {
+            try {
+                await apiRequest('/models/switch', 'POST', { model: modelKey });
+                showToast(`Switched to model: ${modelKey}`);
+                loadModels();
+            } catch (error) {
+                showToast('Failed to switch model: ' + error.message, 'error');
+            }
+        }
+
+        async function setAutoMode(enabled) {
+            try {
+                await apiRequest(`/models/auto?enabled=${enabled}`, 'POST');
+                showToast(enabled ? 'Auto mode enabled' : 'Manual mode enabled');
+                loadModels();
+            } catch (error) {
+                showToast('Failed to set auto mode: ' + error.message, 'error');
+            }
+        }
+
+        async function switchNextModel() {
+            try {
+                await apiRequest('/models/next', 'POST');
+                showToast('Switched to next model');
+                loadModels();
+            } catch (error) {
+                showToast('Failed to switch: ' + error.message, 'error');
+            }
+        }
+
+        function refreshModels() {
+            loadModels();
+            showToast('🔄 Models refreshed');
+        }
+
+        // ============================================
+        // UPLOAD
+        // ============================================
+        document.getElementById('fileInput').addEventListener('change', async function(e) {
+            const files = this.files;
+            if (!files.length) return;
+
+            const progress = document.getElementById('uploadProgress');
+            const progressBar = document.getElementById('uploadProgressBar');
+            const statusText = document.getElementById('uploadStatusText');
+            progress.style.display = 'block';
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                progressBar.style.width = `${((i + 1) / files.length) * 100}%`;
+                statusText.textContent = `Uploading ${file.name}... (${i + 1}/${files.length})`;
+
+                try {
+                    const headers = {};
+                    if (authToken) {
+                        headers['X-API-Key'] = authToken;
+                    }
+
+                    const response = await fetch(`${API_URL}/upload`, {
+                        method: 'POST',
+                        headers: headers,
+                        credentials: 'include',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+                    if (response.ok) {
+                        showToast(`✅ ${file.name} uploaded successfully (${data.chunks_processed} chunks)`);
+                        addUploadedFile(file.name, data.chunks_processed);
+                    } else {
+                        showToast(`❌ Failed to upload ${file.name}: ${data.detail}`, 'error');
+                    }
+                } catch (error) {
+                    showToast(`❌ Error uploading ${file.name}: ${error.message}`, 'error');
+                }
+            }
+
+            progress.style.display = 'none';
+            progressBar.style.width = '0%';
+            this.value = '';
+            loadDashboardData();
+        });
+
+        const uploadArea = document.getElementById('uploadArea');
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#667eea';
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.borderColor = 'rgba(255,255,255,0.1)';
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = 'rgba(255,255,255,0.1)';
+            document.getElementById('fileInput').files = e.dataTransfer.files;
+            document.getElementById('fileInput').dispatchEvent(new Event('change'));
+        });
+        uploadArea.addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+
+        function addUploadedFile(name, chunks) {
+            const container = document.getElementById('uploadedFiles');
+            const div = document.createElement('div');
+            div.style.cssText =
+                'padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;';
+            div.innerHTML = `
+                <span>📄 ${name}</span>
+                <span style="color: #888; font-size: 0.8em;">${chunks || '?'} chunks</span>
+            `;
+            container.prepend(div);
+        }
+
+        // ============================================
+        // CHAT
+        // ============================================
+        async function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            const chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML += `<div class="user-msg">👤 You: ${message}</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+            input.value = '';
+
+            const thinkingId = 'thinking-' + Date.now();
+            chatBox.innerHTML += `<div class="bot-msg" id="${thinkingId}">🤖 Thinking...</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                const headers = {
+                    'Content-Type': 'application/json',
+                };
+                if (authToken) {
+                    headers['X-API-Key'] = authToken;
+                }
+
                 const response = await fetch(`${API_URL}/chat`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: headers,
+                    credentials: 'include',
                     body: JSON.stringify({
                         message: message,
-                        history: conversationHistory,
                         use_rag: true,
-                        model: currentModel !== 'auto' ? currentModel : null
+                        model: 'auto'
                     })
                 });
 
                 const data = await response.json();
-                showTyping(false);
-                addMessage('bot', data.response);
-                if (data.api_used) currentApi.textContent = data.api_used;
-                if (data.model_used) {
-                    currentModelDisplay.textContent = data.model_used;
-                    currentModel = data.model_used;
-                }
-                conversationHistory.push(
-                    { role: 'user', content: message },
-                    { role: 'assistant', content: data.response }
-                );
-            } catch (error) {
-                showTyping(false);
-                addMessage('bot', '❌ Error: ' + error.message);
-            }
-        }
 
-        async function uploadDocument() {
-            const file = fileInput.files[0];
-            if (!file) {
-                uploadStatus.textContent = 'Please select a file.';
-                uploadStatus.className = 'error';
-                return;
-            }
+                const thinkingEl = document.getElementById(thinkingId);
+                if (thinkingEl) thinkingEl.remove();
 
-            const formData = new FormData();
-            formData.append('file', file);
-            uploadStatus.textContent = 'Uploading...';
-            uploadStatus.className = '';
-
-            try {
-                const response = await fetch(`${API_URL}/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
                 if (response.ok) {
-                    uploadStatus.textContent = '✅ ' + data.message;
-                    uploadStatus.className = 'success';
-                    updateStats();
-                    addMessage('bot', `📚 I've processed "${file.name}". I now have ${data.chunks_processed} new pieces of information!`);
+                    chatBox.innerHTML += `<div class="bot-msg">🤖 Vostud AI: ${data.response}</div>`;
+                    if (data.tokens_used) {
+                        chatBox.innerHTML += `<div class="bot-msg" style="font-size: 0.7em; color: #666;">⚡ Tokens: ${data.tokens_used}</div>`;
+                    }
                 } else {
-                    uploadStatus.textContent = '❌ ' + data.detail;
-                    uploadStatus.className = 'error';
+                    chatBox.innerHTML += `<div class="bot-msg" style="color: #f87171;">❌ Error: ${data.detail || 'Unknown error'}</div>`;
+                }
+                chatBox.scrollTop = chatBox.scrollHeight;
+                
+                if (document.getElementById('tab-usage').classList.contains('active')) {
+                    loadUsageStats();
                 }
             } catch (error) {
-                uploadStatus.textContent = '❌ Error: ' + error.message;
-                uploadStatus.className = 'error';
+                const thinkingEl = document.getElementById(thinkingId);
+                if (thinkingEl) thinkingEl.remove();
+                chatBox.innerHTML += `<div class="bot-msg" style="color: #f87171;">❌ Network error: ${error.message}</div>`;
+                chatBox.scrollTop = chatBox.scrollHeight;
             }
         }
 
-        function addMessage(type, content) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${type}`;
-            messageDiv.innerHTML = content.replace(/\n/g, '<br>');
-            chatHistory.appendChild(messageDiv);
-            chatHistory.scrollTop = chatHistory.scrollHeight;
-            return messageDiv;
-        }
-
-        function showTyping(active) {
-            typingIndicator.classList.toggle('active', active);
-        }
-
-        async function updateStats() {
-            try {
-                const response = await fetch(`${API_URL}/knowledge-stats`);
-                const data = await response.json();
-                docCount.textContent = data.total_documents || 0;
-            } catch (e) {}
-        }
-
-        async function loadModels() {
-            try {
-                const response = await fetch(`${API_URL}/models`);
-                const data = await response.json();
-                availableModels = data.available_models || [];
-                currentModel = data.current_model || 'auto';
-                currentModelDisplay.textContent = currentModel;
-                
-                modelSelect.innerHTML = '<option value="auto">🤖 Auto (Best Available)</option>';
-                availableModels.forEach(m => {
-                    const opt = document.createElement('option');
-                    opt.value = m.key;
-                    let statusEmoji = '❓';
-                    if (m.status === 'working') statusEmoji = '✅';
-                    else if (m.status === 'failed') statusEmoji = '❌';
-                    opt.textContent = `${statusEmoji} ${m.model} (${m.api})`;
-                    if (currentModel === m.key) opt.selected = true;
-                    modelSelect.appendChild(opt);
-                });
-                
-                modelStatus.textContent = data.auto_mode ? '✅ Auto mode' : '🎯 Manual mode';
-            } catch (e) {
-                console.error('Failed to load models:', e);
-            }
-        }
-
-        async function switchModel(modelKey) {
-            try {
-                const response = await fetch(`${API_URL}/models/switch`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model: modelKey })
-                });
-                const data = await response.json();
-                currentModel = data.current_model;
-                currentModelDisplay.textContent = currentModel;
-                modelStatus.textContent = data.auto_mode ? '✅ Auto mode' : '🎯 Manual mode';
-                loadModels();
-            } catch (e) {
-                console.error('Failed to switch model:', e);
-            }
-        }
-
-        async function toggleAuto() {
-            try {
-                const isAuto = currentModel === 'auto';
-                const response = await fetch(`${API_URL}/models/auto?enabled=${!isAuto}`, {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                if (!isAuto) {
-                    currentModel = 'auto';
-                    currentModelDisplay.textContent = 'auto';
-                }
-                modelStatus.textContent = data.auto_mode ? '✅ Auto mode' : '🎯 Manual mode';
-                loadModels();
-            } catch (e) {
-                console.error('Failed to toggle auto:', e);
-            }
-        }
-
-        async function generateQuiz() {
-            const topic = userInput.value.trim() || 'coding';
-            userInput.value = '';
-            addMessage('user', `Generate a quiz about: ${topic}`);
-            showTyping(true);
+        // ============================================
+        // ANALYTICS
+        // ============================================
+        async function loadAnalytics() {
+            const days = document.getElementById('analyticsDays').value;
             
             try {
-                const response = await fetch(`${API_URL}/quiz`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ topic: topic, num_questions: 5 })
-                });
-                const data = await response.json();
-                showTyping(false);
-                addMessage('bot', `📝 Quiz about ${topic}:\n\n${data.quiz}`);
+                document.getElementById('statsOverview').innerHTML = `
+                    <div class="loading-overlay" style="grid-column: 1 / -1; min-height: 100px;">
+                        <div class="spinner"></div>
+                        <span>Loading analytics...</span>
+                    </div>
+                `;
+                
+                const response = await apiRequest(`/analytics/stats?days=${days}`);
+                analyticsData = response;
+                
+                updateStatsOverview(response);
+                updateCharts(response);
+                await loadDetailedLogs(days);
+                
             } catch (error) {
-                showTyping(false);
-                addMessage('bot', '❌ Error generating quiz.');
+                console.error('Failed to load analytics:', error);
+                showToast('Failed to load analytics data', 'error');
             }
         }
 
-        function debugMode() {
-            const message = userInput.value.trim();
-            if (message) {
-                userInput.value = `Debug this code and explain any issues:\n${message}`;
-                sendMessage();
-            } else {
-                addMessage('bot', '🐛 Paste your code in the chat box and click Debug again, or ask "Debug this code:" followed by your code.');
-            }
+        function updateStatsOverview(data) {
+            const totalRequests = data.total_requests || 0;
+            const avgResponseSize = data.avg_response_size || 0;
+            const avgRequestSize = data.avg_request_size || 0;
+            const uniqueModels = data.model_usage ? data.model_usage.length : 0;
+            
+            document.getElementById('statsOverview').innerHTML = `
+                <div class="stat-box">
+                    <div class="stat-value">${totalRequests.toLocaleString()}</div>
+                    <div class="stat-label">Total Requests</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">${formatSize(avgResponseSize)}</div>
+                    <div class="stat-label">Avg Response Size</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">${formatSize(avgRequestSize)}</div>
+                    <div class="stat-label">Avg Request Size</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">${uniqueModels}</div>
+                    <div class="stat-label">Models Used</div>
+                </div>
+            `;
         }
 
-        function clearChat() {
-            chatHistory.innerHTML = '';
-            conversationHistory = [];
-            addMessage('bot', '🔄 Chat cleared. How can I help you?');
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
-        sendBtn.addEventListener('click', sendMessage);
-        userInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-        uploadBtn.addEventListener('click', uploadDocument);
-        quizBtn.addEventListener('click', generateQuiz);
-        debugBtn.addEventListener('click', debugMode);
-        clearBtn.addEventListener('click', clearChat);
-        refreshModelsBtn.addEventListener('click', loadModels);
-        nextModelBtn.addEventListener('click', async () => {
+        function updateCharts(data) {
+            const chartType = currentChartType;
+            const isPieType = ['pie', 'doughnut', 'radar'].includes(chartType);
+            
+            if (dailyChart) { dailyChart.destroy(); dailyChart = null; }
+            if (modelChart) { modelChart.destroy(); modelChart = null; }
+            if (apiChart) { apiChart.destroy(); apiChart = null; }
+            if (sizeChart) { sizeChart.destroy(); sizeChart = null; }
+            
+            const colors = [
+                'rgba(102, 126, 234, 0.8)',
+                'rgba(118, 75, 162, 0.8)',
+                'rgba(240, 147, 251, 0.8)',
+                'rgba(74, 222, 128, 0.8)',
+                'rgba(251, 191, 36, 0.8)',
+                'rgba(248, 113, 113, 0.8)',
+                'rgba(96, 165, 250, 0.8)',
+                'rgba(244, 114, 182, 0.8)',
+            ];
+            
+            // 1. Daily Usage Chart
+            const dailyData = data.daily_usage || [];
+            const dailyLabels = dailyData.map(d => d.date);
+            const dailyValues = dailyData.map(d => d.requests);
+            
+            const dailyCtx = document.getElementById('dailyChart').getContext('2d');
+            dailyChart = new Chart(dailyCtx, {
+                type: isPieType ? 'bar' : chartType,
+                data: {
+                    labels: dailyLabels.length > 0 ? dailyLabels : ['No Data'],
+                    datasets: [{
+                        label: 'Daily Requests',
+                        data: dailyValues.length > 0 ? dailyValues : [0],
+                        backgroundColor: colors.slice(0, dailyLabels.length || 1),
+                        borderColor: 'rgba(102, 126, 234, 1)',
+                        borderWidth: 1,
+                        tension: 0.3,
+                        fill: chartType === 'line'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888' } },
+                        x: { grid: { display: false }, ticks: { color: '#888' } }
+                    }
+                }
+            });
+            
+            // 2. Model Usage Chart
+            const modelData = data.model_usage || [];
+            const modelLabels = modelData.map(m => m.model);
+            const modelValues = modelData.map(m => m.count);
+            
+            const modelCtx = document.getElementById('modelChart').getContext('2d');
+            modelChart = new Chart(modelCtx, {
+                type: isPieType ? chartType : chartType,
+                data: {
+                    labels: modelLabels.length > 0 ? modelLabels : ['No Data'],
+                    datasets: [{
+                        label: 'Model Usage',
+                        data: modelValues.length > 0 ? modelValues : [0],
+                        backgroundColor: colors.slice(0, modelLabels.length || 1),
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: isPieType, position: 'bottom', labels: { color: '#aaa' } }
+                    },
+                    scales: isPieType ? {} : {
+                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888' } },
+                        x: { grid: { display: false }, ticks: { color: '#888' } }
+                    }
+                }
+            });
+            
+            // 3. API Usage Chart
+            const apiData = data.api_usage || [];
+            const apiLabels = apiData.map(a => a.api);
+            const apiValues = apiData.map(a => a.count);
+            
+            const apiCtx = document.getElementById('apiChart').getContext('2d');
+            apiChart = new Chart(apiCtx, {
+                type: isPieType ? chartType : chartType,
+                data: {
+                    labels: apiLabels.length > 0 ? apiLabels : ['No Data'],
+                    datasets: [{
+                        label: 'API Usage',
+                        data: apiValues.length > 0 ? apiValues : [0],
+                        backgroundColor: colors.slice(0, apiLabels.length || 1),
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: isPieType, position: 'bottom', labels: { color: '#aaa' } }
+                    },
+                    scales: isPieType ? {} : {
+                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888' } },
+                        x: { grid: { display: false }, ticks: { color: '#888' } }
+                    }
+                }
+            });
+            
+            // 4. Size Chart
+            const sizeCtx = document.getElementById('sizeChart').getContext('2d');
+            const avgResponse = data.avg_response_size || 0;
+            const avgRequest = data.avg_request_size || 0;
+            
+            sizeChart = new Chart(sizeCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Response Size', 'Request Size'],
+                    datasets: [{
+                        label: 'Average Size (KB)',
+                        data: [avgResponse / 1024, avgRequest / 1024],
+                        backgroundColor: ['rgba(74, 222, 128, 0.8)', 'rgba(102, 126, 234, 0.8)'],
+                        borderColor: ['rgba(74, 222, 128, 1)', 'rgba(102, 126, 234, 1)'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888' } },
+                        x: { grid: { display: false }, ticks: { color: '#888' } }
+                    }
+                }
+            });
+        }
+
+        async function loadDetailedLogs(days) {
             try {
-                const response = await fetch(`${API_URL}/models/next`, { method: 'POST' });
-                const data = await response.json();
-                loadModels();
-            } catch (e) {}
-        });
-        toggleAutoBtn.addEventListener('click', toggleAuto);
-        modelSelect.addEventListener('change', (e) => {
-            if (e.target.value !== currentModel) {
-                switchModel(e.target.value);
+                const response = await apiRequest(`/analytics/details?days=${days}`);
+                const logs = response.logs || [];
+                const tbody = document.getElementById('usageLogsBody');
+                
+                if (!logs || logs.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: #666; padding: 30px;">
+                                No usage logs found for this period.
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                tbody.innerHTML = logs.map(log => `
+                    <tr>
+                        <td style="font-size: 0.8em; color: #888;">${log.timestamp}</td>
+                        <td><code style="font-size: 0.8em; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 4px;">${log.endpoint}</code></td>
+                        <td style="color: #4ade80; font-size: 0.85em;">${log.model_used}</td>
+                        <td><span style="background: rgba(102,126,234,0.2); color: #667eea; padding: 2px 8px; border-radius: 10px; font-size: 0.8em;">${log.api_used}</span></td>
+                        <td style="color: #aaa;">${formatSize(log.response_size)}</td>
+                        <td style="color: #aaa;">${formatSize(log.request_size)}</td>
+                    </tr>
+                `).join('');
+                
+            } catch (error) {
+                console.error('Failed to load logs:', error);
+                document.getElementById('usageLogsBody').innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: #f87171; padding: 30px;">
+                            Failed to load logs. Please try again.
+                        </td>
+                    </tr>
+                `;
             }
+        }
+
+        function switchChartType(type) {
+            currentChartType = type;
+            
+            document.querySelectorAll('.chart-type-buttons button').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.chart === type);
+            });
+            
+            if (analyticsData) {
+                updateCharts(analyticsData);
+            }
+        }
+
+        function downloadAnalyticsCSV() {
+            if (!analyticsData) {
+                showToast('Please load analytics data first.', 'error');
+                return;
+            }
+            
+            try {
+                const data = analyticsData;
+                const headers = ['Date', 'Requests', 'Model', 'API', 'Avg Response Size', 'Avg Request Size'];
+                const rows = [];
+                
+                const dailyData = data.daily_usage || [];
+                dailyData.forEach(d => {
+                    rows.push([d.date, d.requests, '', '', '', '']);
+                });
+                
+                const modelData = data.model_usage || [];
+                modelData.forEach(m => {
+                    rows.push(['', '', m.model, '', '', '']);
+                });
+                
+                const apiData = data.api_usage || [];
+                apiData.forEach(a => {
+                    rows.push(['', '', '', a.api, '', '']);
+                });
+                
+                rows.push(['Total Requests', data.total_requests || 0, '', '', '', '']);
+                rows.push(['Avg Response Size', '', '', '', formatSize(data.avg_response_size || 0), '']);
+                rows.push(['Avg Request Size', '', '', '', '', formatSize(data.avg_request_size || 0)]);
+                
+                let csv = headers.join(',') + '\n';
+                rows.forEach(row => {
+                    csv += row.join(',') + '\n';
+                });
+                
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `vostud_analytics_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showToast('📥 Analytics data downloaded!', 'success');
+            } catch (error) {
+                console.error('Failed to download CSV:', error);
+                showToast('Failed to download analytics data.', 'error');
+            }
+        }
+
+        // ============================================
+        // USAGE STATS
+        // ============================================
+        async function loadUsageStats() {
+            try {
+                const response = await apiRequest('/usage');
+                const data = response;
+                
+                if (!data || !data.usage) {
+                    console.warn('No usage data received');
+                    return;
+                }
+                
+                const tier = data.tier || 'free';
+                document.getElementById('usageTier').textContent = tier.toUpperCase();
+                
+                const monthlyTokens = data.usage?.monthly?.tokens_used || 0;
+                const dailyRequests = data.usage?.daily?.requests || 0;
+                const monthlyLimit = data.limits?.tokens_per_month || 50000;
+                const dailyLimit = data.limits?.requests_per_day || 200;
+                
+                document.getElementById('usageTokens').textContent = monthlyTokens.toLocaleString();
+                document.getElementById('usageRequests').textContent = dailyRequests;
+                
+                const tokenPercent = Math.min((monthlyTokens / monthlyLimit) * 100, 100);
+                const requestPercent = Math.min((dailyRequests / dailyLimit) * 100, 100);
+                const remaining = Math.max(100 - tokenPercent, 0);
+                
+                document.getElementById('usageRemaining').textContent = remaining.toFixed(0) + '%';
+                
+                document.getElementById('usageBar').style.width = tokenPercent + '%';
+                document.getElementById('usageTokensText').textContent = `${monthlyTokens.toLocaleString()} / ${monthlyLimit.toLocaleString()}`;
+                document.getElementById('usagePercentText').textContent = tokenPercent.toFixed(1) + '% used';
+                
+                document.getElementById('usageDailyBar').style.width = requestPercent + '%';
+                document.getElementById('usageDailyText').textContent = `${dailyRequests} / ${dailyLimit}`;
+                document.getElementById('usageDailyPercent').textContent = requestPercent.toFixed(1) + '% used';
+                
+            } catch (error) {
+                console.error('Failed to load usage stats:', error);
+                document.getElementById('usageTokens').textContent = 'Error';
+            }
+        }
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        checkAuth();
+
+        document.getElementById('modalOverlay').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
         });
 
-        updateStats();
-        loadModels();
-        setInterval(updateStats, 30000);
-        setInterval(loadModels, 60000);
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendChatMessage();
+        });
+
+        document.querySelector('.divider')?.addEventListener('click', function() {
+            const form = document.getElementById('authForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        });
+
+        console.log('🚀 Vostud AI Platform loaded!');
+        console.log(`📡 API URL: ${API_URL}`);
     </script>
 </body>
 </html>
