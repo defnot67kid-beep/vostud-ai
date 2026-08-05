@@ -5,6 +5,7 @@ Protects API endpoints from excessive usage
 
 import time
 import json
+import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 from collections import defaultdict
@@ -45,6 +46,34 @@ TIER_LIMITS = {
         "chat_per_minute": 60
     }
 }
+
+# Paths to exclude from rate limiting (internal/analytics endpoints)
+EXCLUDED_PATHS = [
+    "/health",
+    "/auth/me",
+    "/auth/logout",
+    "/keys",
+    "/keys/stats",
+    "/keys/generate",
+    "/models",
+    "/models/switch",
+    "/models/auto",
+    "/models/next",
+    "/knowledge-stats",
+    "/analytics/stats",
+    "/analytics/details",
+    "/usage",
+    "/usage/check",
+    "/mode/current",
+    "/oauth-check",
+    "/db-test",
+    "/debug/session",
+    "/platform",
+    "/",
+    "/index.html",
+    "/platform",
+    "/static"
+]
 
 # ============================================
 # TOKEN USAGE TRACKER
@@ -192,63 +221,11 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["100 per hour"])
 token_tracker = TokenUsageTracker()
 
 # ============================================
-# RATE LIMIT DECORATORS
-# ============================================
-
-def rate_limit(limit_value: str, key_func=None):
-    """Custom rate limit decorator with key extraction"""
-    from slowapi import _rate_limit_exceeded_handler
-    
-    def decorator(func):
-        async def wrapper(*args, **kwargs):
-            # Get request from kwargs or args
-            request = None
-            for arg in args:
-                if isinstance(arg, Request):
-                    request = arg
-                    break
-            if not request and "request" in kwargs:
-                request = kwargs["request"]
-            
-            if not request:
-                return await func(*args, **kwargs)
-            
-            # Get rate limit key (user_id or IP)
-            rate_key = None
-            
-            # Try to get user_id from auth
-            if hasattr(request.state, "user_id"):
-                rate_key = f"user:{request.state.user_id}"
-            elif hasattr(request.state, "auth"):
-                rate_key = f"user:{request.state.auth.get('user_id', 'unknown')}"
-            elif hasattr(request, "headers"):
-                api_key = request.headers.get("X-API-Key")
-                if api_key:
-                    # Use API key as rate limit key
-                    rate_key = f"apikey:{api_key[:10]}"
-                else:
-                    rate_key = get_remote_address(request)
-            
-            if not rate_key:
-                rate_key = get_remote_address(request)
-            
-            # Apply rate limit using the key
-            # This is a simplified version - slowapi handles this internally
-            
-            # If limit is exceeded, raise exception
-            # The actual rate limiting is handled by slowapi
-            
-            return await func(*args, **kwargs)
-        
-        return wrapper
-    return decorator
-
-# ============================================
 # RATE LIMIT MIDDLEWARE
 # ============================================
 
 class RateLimitMiddleware:
-    """Custom middleware for rate limiting"""
+    """Custom middleware for rate limiting with path exclusions"""
     
     def __init__(self, app, db=None, token_tracker=None):
         self.app = app
@@ -256,6 +233,20 @@ class RateLimitMiddleware:
         self.token_tracker = token_tracker or TokenUsageTracker(db)
         self.request_counts = defaultdict(list)
         self.user_tiers = {}
+        self.excluded_paths = EXCLUDED_PATHS
+    
+    def _is_excluded_path(self, path: str) -> bool:
+        """Check if the path should be excluded from rate limiting"""
+        # Exact match
+        if path in self.excluded_paths:
+            return True
+        
+        # Check if path starts with any excluded path (for /static/*, /platform/*, etc.)
+        for excluded in self.excluded_paths:
+            if path.startswith(excluded + "/") or path.startswith(excluded + "?"):
+                return True
+        
+        return False
     
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -263,6 +254,12 @@ class RateLimitMiddleware:
             return
         
         request = Request(scope, receive)
+        path = request.url.path
+        
+        # Skip rate limiting for excluded paths
+        if self._is_excluded_path(path):
+            await self.app(scope, receive, send)
+            return
         
         # Extract user ID from auth
         user_id = None
