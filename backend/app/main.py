@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, EmailStr
 from typing import List, Dict, Optional
 import os
@@ -17,6 +18,18 @@ load_dotenv()
 # CREATE APP INSTANCE FIRST
 # ============================================
 app = FastAPI(title="Vostud AI API")
+
+# ============================================
+# SESSION MIDDLEWARE (Required for OAuth)
+# ============================================
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("JWT_SECRET_KEY", "your_super_secret_key_change_this_to_a_long_random_string"),
+    session_cookie="vostud_session",
+    max_age=3600,  # 1 hour
+    same_site="lax",
+    https_only=True,
+)
 
 # ============================================
 # CORS MIDDLEWARE
