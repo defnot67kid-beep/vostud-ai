@@ -124,7 +124,8 @@ async def get_current_user(request: Request):
         "user_id": payload.get("sub"),
         "email": payload.get("email"),
         "name": payload.get("name"),
-        "picture": payload.get("picture")
+        "picture": payload.get("picture"),
+        "tier": payload.get("tier", "free")
     }
 
 async def require_auth(request: Request):
@@ -152,7 +153,8 @@ async def require_api_key_or_oauth(request: Request):
                     "auth_type": "api_key",
                     "user_id": result["user_id"],
                     "email": user.get("email") if user else None,
-                    "name": user.get("display_name") if user else None
+                    "name": user.get("display_name") if user else None,
+                    "tier": user.get("tier", "free") if user else "free"
                 }
         except Exception as e:
             logger.error(f"API key validation error: {e}")
@@ -164,7 +166,8 @@ async def require_api_key_or_oauth(request: Request):
             "auth_type": "oauth",
             "user_id": user.get("user_id"),
             "email": user.get("email"),
-            "name": user.get("name")
+            "name": user.get("name"),
+            "tier": user.get("tier", "free")
         }
     
     # If no auth, raise exception
