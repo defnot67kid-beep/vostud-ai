@@ -54,7 +54,7 @@ watchfiles>=0.13
 websockets>=10.4
 uvloop>=0.14.0
 pyyaml>=5.1
-
+slowapi==0.1.9
 # ============================================
 # Transitive Dependencies (Pinned for Stability)
 # ============================================
