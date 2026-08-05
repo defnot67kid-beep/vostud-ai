@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, EmailStr
 from typing import List, Dict, Optional
@@ -23,6 +24,19 @@ load_dotenv()
 # CREATE APP INSTANCE FIRST
 # ============================================
 app = FastAPI(title="Vostud AI API")
+
+# ============================================
+# STATIC FILES (for images, etc.)
+# ============================================
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../static")
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(os.path.join(STATIC_DIR, "images"), exist_ok=True)
+
+app.mount(
+    "/static",
+    StaticFiles(directory=STATIC_DIR),
+    name="static",
+)
 
 # ============================================
 # SESSION MIDDLEWARE
@@ -50,7 +64,7 @@ app.add_middleware(
 )
 
 # ============================================
-# STATIC FILES
+# STATIC FILES (Frontend HTML)
 # ============================================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
@@ -155,7 +169,6 @@ def contains_profanity(text: str) -> bool:
     if not text:
         return False
     text_lower = text.lower()
-    # Use regex to match whole words only
     pattern = r'\b(?:' + '|'.join(re.escape(word) for word in PROFANITY_LIST) + r')\b'
     return bool(re.search(pattern, text_lower))
 
@@ -317,6 +330,22 @@ class CreateKeyResponse(BaseModel):
 
 class ModeSwitchRequest(BaseModel):
     mode: str  # coding, research, organize, compare, summary
+
+# ============================================
+# LOGO ENDPOINT
+# ============================================
+
+@app.get("/logo")
+async def get_logo():
+    """Get the Vostud AI logo"""
+    logo_path = os.path.join(STATIC_DIR, "images", "vostud-logo.png")
+    if os.path.exists(logo_path):
+        return FileResponse(logo_path, media_type="image/png")
+    # Return default if logo not found
+    default_path = os.path.join(STATIC_DIR, "images", "default.png")
+    if os.path.exists(default_path):
+        return FileResponse(default_path, media_type="image/png")
+    raise HTTPException(status_code=404, detail="Logo not found")
 
 # ============================================
 # FRONTEND ROUTES
@@ -662,21 +691,16 @@ async def chat(
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
-    # ============================================
-    # CHECK FOR PROFANITY IN MESSAGE
-    # ============================================
+    # Check for profanity
     if contains_profanity(chat_request.message):
         raise HTTPException(
             status_code=400, 
             detail="❌ Your message contains inappropriate language. Please keep the conversation professional."
         )
     
-    # ============================================
-    # VALIDATE MODEL
-    # ============================================
+    # Validate model
     model_to_use = chat_request.model
     
-    # If no model specified, try to get from auth or default to auto
     if not model_to_use:
         model_to_use = auth.get("default_model", "auto")
     
@@ -684,20 +708,17 @@ async def chat(
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_message)
     
-    # If model is "auto", let the engine decide
     if actual_model == "auto":
-        actual_model = None  # Let engine auto-select
+        actual_model = None
     
     user_id = auth.get("user_id") or auth.get("sub")
     tier = auth.get("tier", "free")
     
-    # Check token usage limits
     can_proceed, message = await token_tracker.check_limit(user_id, tier)
     if not can_proceed:
         raise HTTPException(status_code=429, detail=message)
     
     try:
-        # Estimate tokens
         tokens_used = len(chat_request.message) // 4
         
         response = chat_engine.generate_response(
@@ -710,7 +731,6 @@ async def chat(
         tokens_used += len(response) // 4
         model_used = chat_engine.current_api or "unknown"
         
-        # Track usage
         await token_tracker.track_usage(
             user_id=user_id,
             tokens_used=tokens_used,
@@ -719,7 +739,6 @@ async def chat(
             cost=tokens_used * 0.000002
         )
         
-        # Format response if requested
         if chat_request.format == "source_only":
             response = extract_sources_only(response)
         elif chat_request.format == "concise":
@@ -751,14 +770,12 @@ async def chat_public(request: Request, chat_request: ChatRequest):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
-    # Check for profanity
     if contains_profanity(chat_request.message):
         raise HTTPException(
             status_code=400, 
             detail="❌ Your message contains inappropriate language. Please keep the conversation professional."
         )
     
-    # Validate model for public endpoint too
     model_to_use = chat_request.model or "auto"
     is_valid, error_message, actual_model = validate_model(model_to_use)
     if not is_valid:
@@ -789,14 +806,12 @@ async def get_sources_only(
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
-    # Check for profanity
     if contains_profanity(chat_request.message):
         raise HTTPException(
             status_code=400, 
             detail="❌ Your message contains inappropriate language. Please keep the conversation professional."
         )
     
-    # Validate model
     model_to_use = chat_request.model or "auto"
     is_valid, error_message, actual_model = validate_model(model_to_use)
     if not is_valid:
@@ -926,7 +941,6 @@ async def add_text(
     if not rag_engine:
         raise HTTPException(status_code=400, detail="RAG engine not available")
     
-    # Check for profanity in text
     if contains_profanity(text):
         raise HTTPException(
             status_code=400, 
@@ -939,274 +953,3 @@ async def add_text(
         num_chunks = rag_engine.add_text(text, metadata or {"user_id": user_id})
         return {
             "status": "success",
-            "chunks_processed": num_chunks,
-            "message": f"Added {num_chunks} chunks to knowledge base"
-        }
-    except Exception as e:
-        logger.error(f"Add text error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================
-# QUIZ ENDPOINTS
-# ============================================
-
-@app.post("/quiz")
-@limiter.limit("10 per hour")
-async def generate_quiz(
-    request: Request,
-    quiz_request: QuizRequest,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    if not chat_engine:
-        raise HTTPException(status_code=503, detail="Chat engine not available")
-    
-    # Check for profanity in topic
-    if contains_profanity(quiz_request.topic):
-        raise HTTPException(
-            status_code=400, 
-            detail="❌ Your topic contains inappropriate language. Please keep the content professional."
-        )
-    
-    try:
-        quiz = chat_engine.generate_quiz(
-            topic=quiz_request.topic,
-            num_questions=quiz_request.num_questions
-        )
-        return {"quiz": quiz}
-    except Exception as e:
-        logger.error(f"Quiz error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================
-# STATS ENDPOINTS
-# ============================================
-
-@app.get("/knowledge-stats")
-async def get_stats(auth: dict = Depends(require_api_key_or_oauth)):
-    if not rag_engine:
-        return {"total_documents": 0, "status": "not_available"}
-    try:
-        count = rag_engine.count()
-        return {"total_documents": count, "status": "available"}
-    except Exception as e:
-        logger.error(f"Stats error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================
-# MODEL SWITCHER ENDPOINTS
-# ============================================
-
-@app.get("/models")
-async def get_models(auth: dict = Depends(require_api_key_or_oauth)):
-    if not chat_engine or not chat_engine.model_switcher:
-        raise HTTPException(status_code=503, detail="Model switcher not available")
-    return {
-        "current_model": chat_engine.model_switcher.get_current_model(),
-        "auto_mode": chat_engine.model_switcher.auto_mode,
-        "available_models": chat_engine.model_switcher.get_available_models_list()
-    }
-
-@app.post("/models/switch")
-async def switch_model(
-    request: ModelSwitchRequest,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    if not chat_engine or not chat_engine.model_switcher:
-        raise HTTPException(status_code=503, detail="Model switcher not available")
-    result = chat_engine.model_switcher.set_model(request.model)
-    return {
-        "current_model": chat_engine.model_switcher.get_current_model(),
-        "auto_mode": chat_engine.model_switcher.auto_mode,
-        "message": result
-    }
-
-@app.post("/models/auto")
-async def set_auto_mode(
-    enabled: bool = True,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    if not chat_engine or not chat_engine.model_switcher:
-        raise HTTPException(status_code=503, detail="Model switcher not available")
-    result = chat_engine.model_switcher.set_auto_mode(enabled)
-    return {
-        "auto_mode": chat_engine.model_switcher.auto_mode,
-        "message": result
-    }
-
-@app.post("/models/next")
-async def switch_next(auth: dict = Depends(require_api_key_or_oauth)):
-    if not chat_engine or not chat_engine.model_switcher:
-        raise HTTPException(status_code=503, detail="Model switcher not available")
-    result = chat_engine.model_switcher.switch_to_next_model()
-    return {
-        "current_model": chat_engine.model_switcher.get_current_model(),
-        "message": result
-    }
-
-# ============================================
-# ANALYTICS ENDPOINTS (No rate limits)
-# ============================================
-
-@app.get("/analytics/stats")
-async def get_analytics_stats(
-    days: int = 30,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    try:
-        stats = db.get_usage_stats(user_id, days)
-        return stats
-    except Exception as e:
-        logger.error(f"❌ Analytics stats error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/analytics/details")
-async def get_analytics_details(
-    days: int = 30,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    try:
-        logs = db.get_detailed_usage(user_id, days)
-        return {"logs": logs}
-    except Exception as e:
-        logger.error(f"❌ Analytics details error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================
-# USAGE ENDPOINTS (No rate limits)
-# ============================================
-
-@app.get("/usage")
-async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    tier = auth.get("tier", "free")
-    usage = await token_tracker.get_usage(user_id, "month")
-    daily_usage = await token_tracker.get_usage(user_id, "day")
-    return {
-        "tier": tier,
-        "limits": TIER_LIMITS.get(tier, TIER_LIMITS["free"]),
-        "usage": {
-            "monthly": usage,
-            "daily": daily_usage
-        }
-    }
-
-@app.get("/usage/check")
-async def check_usage(auth: dict = Depends(require_api_key_or_oauth)):
-    user_id = auth.get("user_id") or auth.get("sub")
-    tier = auth.get("tier", "free")
-    can_proceed, message = await token_tracker.check_limit(user_id, tier)
-    return {
-        "can_proceed": can_proceed,
-        "message": message,
-        "tier": tier,
-        "limits": TIER_LIMITS.get(tier, TIER_LIMITS["free"])
-    }
-
-# ============================================
-# HEALTH & TEST ENDPOINTS
-# ============================================
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
-
-@app.get("/db-test")
-async def test_database():
-    if not db:
-        return {"status": "error", "message": "Database not connected"}
-    try:
-        db.db.command("ping")
-        return {"status": "success", "message": "Database connected"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.get("/oauth-check")
-async def oauth_check():
-    client_id = os.getenv("GOOGLE_CLIENT_ID")
-    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
-    return {
-        "client_id_configured": bool(client_id),
-        "client_secret_configured": bool(client_secret),
-        "redirect_uri": redirect_uri,
-        "oauth_available": bool(oauth),
-        "client_id_preview": client_id[:20] + "..." if client_id else None
-    }
-
-# ============================================
-# FALLBACK & ERROR HANDLERS
-# ============================================
-
-@app.exception_handler(404)
-async def not_found_handler(request: Request, exc):
-    path = request.url.path
-    if path.startswith("/api") or path.startswith("/auth") or path.startswith("/keys") or path.startswith("/models"):
-        return JSONResponse(status_code=404, content={"detail": "Not found"})
-    index_path = os.path.join(FRONTEND_DIR, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return HTMLResponse(content=f"<h1>404 - Page not found</h1>", status_code=404)
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"❌ Global error: {exc}")
-    import traceback
-    traceback.print_exc()
-    return JSONResponse(
-        status_code=500,
-        content={"detail": f"Internal Server Error: {str(exc)}"}
-    )
-
-# ============================================
-# HELPER FUNCTIONS
-# ============================================
-
-def extract_sources_only(response: str) -> str:
-    import re
-    source_pattern = r'\[Source:[^\]]*\]'
-    sources = re.findall(source_pattern, response)
-    if not sources:
-        sources_section = re.search(r'Sources?:?\s*\n?([\s\S]*?)(?=\n\n|$)', response)
-        if sources_section:
-            return f"Sources:\n{sources_section.group(1).strip()}"
-    if sources:
-        unique_sources = list(dict.fromkeys(sources))
-        return "Sources:\n" + "\n".join([f"• {s}" for s in unique_sources])
-    return "No specific sources cited in the response."
-
-def extract_concise_response(response: str) -> str:
-    import re
-    lines = response.split('\n')
-    key_points = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith('•') or stripped.startswith('-') or stripped.startswith('*'):
-            key_points.append(stripped)
-        elif re.match(r'^\d+\.', stripped):
-            key_points.append(stripped)
-    if key_points:
-        return "Key Points:\n" + "\n".join(key_points)
-    paragraphs = [p for p in response.split('\n\n') if p.strip() and len(p.strip()) > 50]
-    if paragraphs:
-        return "Summary:\n" + paragraphs[0]
-    return response[:500] + "..." if len(response) > 500 else response
-
-# ============================================
-# RUN APP
-# ============================================
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
