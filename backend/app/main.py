@@ -618,30 +618,21 @@ async def get_usage_stats(auth: dict = Depends(require_api_key_or_oauth)):
     """Get usage statistics for the user"""
     try:
         if not db:
-            return {"total_requests": 0, "last_24h": 0}
+            return {"total_requests": 0, "last_24h": 0, "total_keys": 0, "active_keys": 0, "total_tokens": 0}
         
         user_id = auth.get("user_id") or auth.get("sub")
         if not user_id:
             raise HTTPException(status_code=400, detail="User ID not found")
         
-        # Get key stats
-        key_stats = db.get_key_stats(user_id)
-        
-        # Get usage from last 24 hours
-        cutoff_date = datetime.utcnow() - timedelta(hours=24)
-        last_24h = db.usage_logs.count_documents({
-            "user_id": user_id,
-            "timestamp": {"$gte": cutoff_date}
-        })
-        
-        # Get total usage
-        total_usage = db.usage_logs.count_documents({"user_id": user_id})
+        # Get user usage summary
+        summary = db.get_user_usage_summary(user_id)
         
         return {
-            "total_keys": key_stats.get("total_keys", 0),
-            "active_keys": key_stats.get("active_keys", 0),
-            "total_requests": total_usage,
-            "last_24h": last_24h
+            "total_requests": summary.get("total_requests", 0),
+            "last_24h": summary.get("last_24h", 0),
+            "total_keys": summary.get("total_keys", 0),
+            "active_keys": summary.get("active_keys", 0),
+            "total_tokens": summary.get("total_tokens", 0)
         }
     except Exception as e:
         logger.error(f"❌ Stats error: {e}")
@@ -687,8 +678,10 @@ async def chat(
         raise HTTPException(status_code=429, detail=message)
     
     try:
+        # Get API key from headers
         api_key = request.headers.get("X-API-Key")
         
+        # Calculate tokens
         tokens_used = len(chat_request.message) // 4
         
         response = chat_engine.generate_response(
@@ -701,6 +694,7 @@ async def chat(
         tokens_used += len(response) // 4
         model_used = chat_engine.current_api or "unknown"
         
+        # Log usage in database
         if db:
             db.log_usage(
                 user_id=user_id,
@@ -1083,10 +1077,54 @@ async def get_analytics_details(
 
 @app.get("/usage")
 async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
+    """Get token usage for the user"""
     user_id = auth.get("user_id") or auth.get("sub")
     if not user_id:
         raise HTTPException(status_code=400, detail="User ID not found")
+    
     tier = auth.get("tier", "free")
+    
+    # Get usage from database directly
+    if db:
+        cutoff_date = datetime.utcnow() - timedelta(days=30)
+        pipeline = [
+            {"$match": {
+                "user_id": user_id,
+                "timestamp": {"$gte": cutoff_date}
+            }},
+            {"$group": {
+                "_id": None,
+                "tokens_used": {"$sum": "$tokens_used"},
+                "requests": {"$sum": 1}
+            }}
+        ]
+        result = list(db.usage_logs.aggregate(pipeline))
+        
+        monthly_tokens = result[0].get("tokens_used", 0) if result else 0
+        monthly_requests = result[0].get("requests", 0) if result else 0
+        
+        # Daily usage
+        cutoff_daily = datetime.utcnow() - timedelta(days=1)
+        daily_requests = db.usage_logs.count_documents({
+            "user_id": user_id,
+            "timestamp": {"$gte": cutoff_daily}
+        })
+        
+        return {
+            "tier": tier,
+            "limits": TIER_LIMITS.get(tier, TIER_LIMITS["free"]),
+            "usage": {
+                "monthly": {
+                    "tokens_used": monthly_tokens,
+                    "requests": monthly_requests
+                },
+                "daily": {
+                    "requests": daily_requests
+                }
+            }
+        }
+    
+    # Fallback to token tracker
     usage = await token_tracker.get_usage(user_id, "month")
     daily_usage = await token_tracker.get_usage(user_id, "day")
     return {
