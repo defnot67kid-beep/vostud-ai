@@ -1,142 +1,683 @@
-"""
-Vostud AI - Google OAuth Integration
-"""
-
+from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse, JSONResponse, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, EmailStr
+from typing import List, Dict, Optional
 import os
-import jwt
-from datetime import datetime, timedelta
-from fastapi import HTTPException, Depends, Request
-from fastapi.responses import RedirectResponse
-from authlib.integrations.starlette_client import OAuth
-from starlette.config import Config
+import shutil
 from dotenv import load_dotenv
-from pydantic import BaseModel
-from typing import Optional
+from datetime import datetime, timedelta
+import uuid
+import mimetypes
 
 load_dotenv()
 
 # ============================================
-# JWT Helpers
+# CREATE APP INSTANCE FIRST
 # ============================================
-
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your_super_secret_key_change_this")
-ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 10080))
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Create JWT access token"""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-def decode_access_token(token: str):
-    """Decode JWT access token"""
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except jwt.PyJWTError:
-        return None
+app = FastAPI(title="Vostud AI API")
 
 # ============================================
-# OAuth Setup
+# CORS MIDDLEWARE
 # ============================================
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://vostud-ai.onrender.com")
 
-def setup_oauth(app):
-    """Setup Google OAuth"""
-    
-    config = Config('.env')
-    oauth = OAuth(config)
-    
-    oauth.register(
-        name='google',
-        server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-        client_id=os.getenv('GOOGLE_CLIENT_ID'),
-        client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
-        client_kwargs={
-            'scope': 'openid email profile'
-        }
-    )
-    
-    return oauth
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[FRONTEND_URL, "http://localhost:3000", "http://localhost:8000", "*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ============================================
-# User Models
+# STATIC FILES (Frontend)
+# ============================================
+# Get the absolute path to the frontend directory
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
+
+# Ensure frontend directory exists
+if not os.path.exists(FRONTEND_DIR):
+    FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
+    if not os.path.exists(FRONTEND_DIR):
+        print(f"⚠️ Frontend directory not found at: {FRONTEND_DIR}")
+
+print(f"📁 Frontend directory: {FRONTEND_DIR}")
+
+# ============================================
+# IMPORTS
+# ============================================
+from app.smart_engine import SmartAIEngine
+from app.rag_engine import RAGEngine
+from app.database import Database
+from app.auth import validate_api_key
+from app.oauth import (
+    setup_oauth,
+    create_access_token,
+    get_current_user,
+    require_auth,
+    require_api_key_or_oauth,
+    optional_auth,
+    GoogleUserInfo,
+    decode_access_token,
+    SECRET_KEY,
+    ALGORITHM
+)
+from authlib.integrations.starlette_client import OAuthError
+
+# ============================================
+# SETUP OAUTH
+# ============================================
+oauth = setup_oauth(app)
+
+# ============================================
+# INITIALIZE ENGINES
+# ============================================
+print("🚀 Starting Vostud AI...")
+
+# Database
+db = None
+try:
+    db = Database()
+    print("✅ Database connected successfully")
+except Exception as e:
+    print(f"❌ Database connection failed: {e}")
+
+# RAG Engine
+rag_engine = None
+try:
+    rag_engine = RAGEngine()
+    print(f"✅ RAG Engine initialized with {rag_engine.count()} documents")
+except Exception as e:
+    print(f"❌ RAG Engine failed: {e}")
+
+# Chat Engine
+chat_engine = None
+try:
+    chat_engine = SmartAIEngine()
+    if rag_engine:
+        chat_engine.rag = rag_engine
+    print(f"✅ Chat Engine initialized")
+except Exception as e:
+    print(f"❌ Chat Engine failed: {e}")
+
+# ============================================
+# PYDANTIC MODELS
 # ============================================
 
-class GoogleUserInfo(BaseModel):
-    email: str
-    name: str
-    picture: Optional[str] = None
-    given_name: Optional[str] = None
-    family_name: Optional[str] = None
+class ChatRequest(BaseModel):
+    message: str
+    history: Optional[List[Dict]] = None
+    use_rag: bool = True
+    model: Optional[str] = None
+
+class ChatResponse(BaseModel):
+    response: str
+    api_used: Optional[str] = None
+    model_used: Optional[str] = None
+
+class QuizRequest(BaseModel):
+    topic: str
+    num_questions: int = 5
+
+class ModelSwitchRequest(BaseModel):
+    model: str
+
+class CreateKeyRequest(BaseModel):
+    name: Optional[str] = None
+    expires_in_days: int = 365
+    rate_limit: int = 1000
+
+class CreateKeyResponse(BaseModel):
+    api_key: str
+    key_prefix: str
+    user_id: str
+    expires_at: str
 
 # ============================================
-# Auth Dependencies
+# FRONTEND ROUTES
 # ============================================
 
-async def get_current_user(request: Request):
-    """Get current user from JWT token"""
-    token = request.cookies.get("access_token")
-    
-    if not token:
-        return None
-    
-    payload = decode_access_token(token)
-    if not payload:
-        return None
-    
+@app.get("/")
+@app.head("/")
+async def root():
+    """Serve the main index.html or API status"""
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
     return {
-        "user_id": payload.get("sub"),
-        "email": payload.get("email"),
-        "name": payload.get("name"),
-        "picture": payload.get("picture")
+        "message": "Vostud AI API is running!",
+        "rag_available": rag_engine is not None,
+        "model_switcher_available": chat_engine and chat_engine.model_switcher is not None,
+        "apis_available": chat_engine.api_priority if chat_engine else [],
+        "database_connected": db is not None,
+        "oauth_available": bool(os.getenv("GOOGLE_CLIENT_ID"))
     }
 
-async def require_auth(request: Request):
-    """Require authentication"""
+@app.get("/platform")
+@app.head("/platform")
+async def serve_platform():
+    """Serve the platform dashboard"""
+    platform_path = os.path.join(FRONTEND_DIR, "platform.html")
+    if os.path.exists(platform_path):
+        return FileResponse(platform_path)
+    return HTMLResponse(
+        content="""
+        <!DOCTYPE html>
+        <html>
+        <head><title>Vostud AI Platform</title></head>
+        <body style="background: #0f0c29; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; flex-direction: column;">
+            <h1 style="background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">⚡ Vostud AI</h1>
+            <p style="color: #888;">Platform page not found. Please make sure platform.html exists in the frontend directory.</p>
+            <p style="color: #666; font-size: 0.8em;">Try visiting <a href="/" style="color: #667eea;">the main page</a></p>
+        </body>
+        </html>
+        """,
+        status_code=404
+    )
+
+@app.get("/index.html")
+async def serve_index():
+    """Serve index.html"""
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    raise HTTPException(status_code=404, detail="index.html not found")
+
+# ============================================
+# OAUTH ROUTES
+# ============================================
+
+@app.get("/auth/google")
+async def auth_google(request: Request):
+    """Redirect to Google OAuth"""
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://vostud-ai.onrender.com/auth/google/callback")
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+@app.get("/auth/google/callback")
+async def auth_google_callback(request: Request):
+    """Google OAuth callback"""
+    try:
+        # Get user info from Google
+        token = await oauth.google.authorize_access_token(request)
+        user_info = token.get('userinfo')
+        
+        if not user_info:
+            raise HTTPException(status_code=400, detail="Failed to get user info")
+        
+        # Extract user data
+        email = user_info.get('email')
+        name = user_info.get('name', email.split('@')[0])
+        picture = user_info.get('picture')
+        given_name = user_info.get('given_name', name)
+        family_name = user_info.get('family_name', '')
+        
+        # Check if user exists in database
+        if db:
+            existing_user = db.users.find_one({"email": email})
+            
+            if not existing_user:
+                # Create new user
+                user_doc = {
+                    "email": email,
+                    "username": name,
+                    "display_name": name,
+                    "picture": picture,
+                    "given_name": given_name,
+                    "family_name": family_name,
+                    "created_at": datetime.utcnow(),
+                    "auth_provider": "google",
+                    "api_keys": []
+                }
+                db.users.insert_one(user_doc)
+                user_id = str(user_doc["_id"])
+            else:
+                user_id = str(existing_user["_id"])
+                # Update user info if changed
+                db.users.update_one(
+                    {"_id": existing_user["_id"]},
+                    {"$set": {
+                        "display_name": name,
+                        "picture": picture,
+                        "last_login": datetime.utcnow()
+                    }}
+                )
+        else:
+            # Fallback if database not available
+            user_id = f"user_{uuid.uuid4().hex[:8]}"
+        
+        # Create JWT token
+        access_token = create_access_token({
+            "sub": user_id,
+            "email": email,
+            "name": name,
+            "picture": picture or ""
+        })
+        
+        # Redirect to frontend with token
+        frontend_url = os.getenv("FRONTEND_URL", "https://vostud-ai.onrender.com")
+        
+        # Set cookie and redirect
+        response = RedirectResponse(url=f"{frontend_url}/platform")
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            secure=True,
+            samesite="lax"
+        )
+        
+        return response
+        
+    except OAuthError as e:
+        raise HTTPException(status_code=400, detail=f"OAuth error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
+
+@app.get("/auth/me")
+async def auth_me(request: Request):
+    """Get current user info"""
     user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return user
+    
+    return {
+        "authenticated": True,
+        "user": user
+    }
 
-async def require_api_key_or_oauth(request: Request):
-    """Allow either API key OR OAuth cookie"""
-    # Check for API key in header
-    api_key = request.headers.get("X-API-Key")
-    
-    if api_key:
-        from app.database import Database
-        db = Database()
-        result = db.validate_api_key(api_key)
-        if result["valid"]:
-            return {"auth_type": "api_key", "user_id": result["user_id"]}
-    
-    # Check for OAuth cookie
-    user = await get_current_user(request)
-    if user:
-        return {"auth_type": "oauth", **user}
-    
-    raise HTTPException(status_code=401, detail="Authentication required")
+@app.post("/auth/logout")
+async def auth_logout():
+    """Logout user"""
+    response = JSONResponse({"message": "Logged out successfully"})
+    response.delete_cookie("access_token")
+    return response
 
-async def optional_auth(request: Request):
-    """Optional authentication (public endpoints)"""
-    # Check for API key
-    api_key = request.headers.get("X-API-Key")
-    if api_key:
-        from app.database import Database
-        db = Database()
-        result = db.validate_api_key(api_key)
-        if result["valid"]:
-            return {"auth_type": "api_key", "user_id": result["user_id"]}
+# ============================================
+# API KEY ENDPOINTS (with OAuth support)
+# ============================================
+
+@app.post("/keys/generate", response_model=CreateKeyResponse)
+async def generate_api_key(
+    request: CreateKeyRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Generate a new API key"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
     
-    # Check for OAuth cookie
-    user = await get_current_user(request)
-    if user:
-        return {"auth_type": "oauth", **user}
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
     
-    return None
+    result = db.create_api_key(
+        user_id=user_id,
+        name=request.name,
+        expires_in_days=request.expires_in_days
+    )
+    
+    return result
+
+@app.get("/keys")
+async def list_api_keys(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """List all API keys for the user"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    keys = db.api_keys.find({"user_id": user_id})
+    
+    return [{
+        "key_prefix": k.get("key_prefix"),
+        "name": k.get("name"),
+        "status": k.get("status"),
+        "created_at": k.get("created_at"),
+        "expires_at": k.get("expires_at"),
+        "last_used": k.get("last_used"),
+        "usage_count": k.get("usage_count", 0)
+    } for k in keys]
+
+@app.delete("/keys/{key_prefix}")
+async def revoke_api_key(
+    key_prefix: str,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Revoke an API key"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    # Find the key
+    key_doc = db.api_keys.find_one({
+        "user_id": user_id,
+        "key_prefix": key_prefix
+    })
+    
+    if not key_doc:
+        raise HTTPException(404, "Key not found")
+    
+    # Revoke it
+    db.api_keys.update_one(
+        {"_id": key_doc["_id"]},
+        {"$set": {"status": "revoked"}}
+    )
+    
+    return {"message": "API key revoked"}
+
+@app.get("/keys/stats")
+async def get_usage_stats(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get usage statistics for API key"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    stats = db.usage_logs.aggregate([
+        {"$match": {"user_id": user_id}},
+        {"$group": {
+            "_id": None,
+            "total_requests": {"$sum": 1},
+            "last_24h": {
+                "$sum": {
+                    "$cond": [
+                        {"$gte": ["$timestamp", datetime.utcnow() - timedelta(hours=24)]},
+                        1,
+                        0
+                    ]
+                }
+            }
+        }}
+    ])
+    
+    result = list(stats)
+    return result[0] if result else {"total_requests": 0, "last_24h": 0}
+
+# ============================================
+# CHAT ENDPOINTS
+# ============================================
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(
+    request: ChatRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Chat with Vostud AI (requires authentication)"""
+    if not chat_engine:
+        raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    try:
+        response = chat_engine.generate_response(
+            user_message=request.message,
+            conversation_history=request.history,
+            use_rag=request.use_rag,
+            model_override=request.model
+        )
+        
+        model_used = None
+        if chat_engine.model_switcher:
+            if request.model:
+                model_used = request.model
+            elif chat_engine.model_switcher.current_model:
+                model_used = chat_engine.model_switcher.current_model
+            elif chat_engine.model_switcher.auto_mode:
+                model_used = "auto"
+        
+        return ChatResponse(
+            response=response,
+            api_used=chat_engine.current_api,
+            model_used=model_used
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/chat/public")
+async def chat_public(
+    request: ChatRequest
+):
+    """Public chat endpoint (no authentication, rate limited)"""
+    if not chat_engine:
+        raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    try:
+        response = chat_engine.generate_response(
+            user_message=request.message,
+            conversation_history=request.history,
+            use_rag=request.use_rag,
+            model_override=request.model
+        )
+        
+        return {"response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================
+# UPLOAD ENDPOINTS
+# ============================================
+
+@app.post("/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Upload a document to the RAG database"""
+    if not rag_engine:
+        raise HTTPException(status_code=400, detail="RAG engine not available")
+    
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext not in ['.pdf', '.txt', '.lua', '.luau']:
+        raise HTTPException(status_code=400, detail="Only .pdf, .txt, .lua, .luau files are supported")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    
+    try:
+        os.makedirs("./data/uploaded_docs", exist_ok=True)
+        file_path = f"./data/uploaded_docs/{file.filename}"
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        num_chunks = rag_engine.add_document(
+            file_path,
+            metadata={"filename": file.filename, "type": file_ext, "user_id": user_id}
+        )
+        
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "file_type": file_ext,
+            "chunks_processed": num_chunks,
+            "message": f"Added {num_chunks} chunks to knowledge base"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/add-text")
+async def add_text(
+    text: str,
+    metadata: Optional[Dict] = None,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Add raw text to the knowledge base"""
+    if not rag_engine:
+        raise HTTPException(status_code=400, detail="RAG engine not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    
+    try:
+        num_chunks = rag_engine.add_text(text, metadata or {"user_id": user_id})
+        return {
+            "status": "success",
+            "chunks_processed": num_chunks,
+            "message": f"Added {num_chunks} chunks to knowledge base"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================
+# QUIZ ENDPOINTS
+# ============================================
+
+@app.post("/quiz")
+async def generate_quiz(
+    request: QuizRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Generate a quiz on a topic"""
+    if not chat_engine:
+        raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    try:
+        quiz = chat_engine.generate_quiz(
+            topic=request.topic,
+            num_questions=request.num_questions
+        )
+        return {"quiz": quiz}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================
+# STATS ENDPOINTS
+# ============================================
+
+@app.get("/knowledge-stats")
+async def get_stats(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get knowledge base statistics"""
+    if not rag_engine:
+        return {"total_documents": 0, "status": "not_available"}
+    
+    try:
+        count = rag_engine.count()
+        return {"total_documents": count, "status": "available"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================
+# MODEL SWITCHER ENDPOINTS
+# ============================================
+
+@app.get("/models")
+async def get_models(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get available models and current selection"""
+    if not chat_engine or not chat_engine.model_switcher:
+        raise HTTPException(status_code=503, detail="Model switcher not available")
+    
+    return {
+        "current_model": chat_engine.model_switcher.get_current_model(),
+        "auto_mode": chat_engine.model_switcher.auto_mode,
+        "available_models": chat_engine.model_switcher.get_available_models_list()
+    }
+
+@app.post("/models/switch")
+async def switch_model(
+    request: ModelSwitchRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Switch to a specific model or auto mode"""
+    if not chat_engine or not chat_engine.model_switcher:
+        raise HTTPException(status_code=503, detail="Model switcher not available")
+    
+    result = chat_engine.model_switcher.set_model(request.model)
+    return {
+        "current_model": chat_engine.model_switcher.get_current_model(),
+        "auto_mode": chat_engine.model_switcher.auto_mode,
+        "message": result
+    }
+
+@app.post("/models/auto")
+async def set_auto_mode(
+    enabled: bool = True,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Enable or disable auto model selection"""
+    if not chat_engine or not chat_engine.model_switcher:
+        raise HTTPException(status_code=503, detail="Model switcher not available")
+    
+    result = chat_engine.model_switcher.set_auto_mode(enabled)
+    return {
+        "auto_mode": chat_engine.model_switcher.auto_mode,
+        "message": result
+    }
+
+@app.post("/models/next")
+async def switch_next(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Switch to the next available model"""
+    if not chat_engine or not chat_engine.model_switcher:
+        raise HTTPException(status_code=503, detail="Model switcher not available")
+    
+    result = chat_engine.model_switcher.switch_to_next_model()
+    return {
+        "current_model": chat_engine.model_switcher.get_current_model(),
+        "message": result
+    }
+
+# ============================================
+# HEALTH & TEST ENDPOINTS
+# ============================================
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+
+@app.get("/db-test")
+async def test_database():
+    """Test database connection"""
+    if not db:
+        return {"status": "error", "message": "Database not connected"}
+    
+    try:
+        db.db.command("ping")
+        return {"status": "success", "message": "Database connected"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# ============================================
+# FALLBACK FOR 404 - Serve frontend
+# ============================================
+
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc):
+    """Handle 404 errors by serving the frontend if the path might be a frontend route"""
+    path = request.url.path
+    
+    # If it's an API path, return JSON error
+    if path.startswith("/api") or path.startswith("/auth") or path.startswith("/keys") or path.startswith("/models"):
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
+    
+    # Try to serve the index.html for frontend routes
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    
+    return HTMLResponse(
+        content=f"<h1>404 - Page not found</h1><p>The requested path '{path}' does not exist.</p>",
+        status_code=404
+    )
+
+# ============================================
+# RUN APP
+# ============================================
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
