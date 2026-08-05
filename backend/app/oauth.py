@@ -146,14 +146,26 @@ async def require_api_key_or_oauth(request: Request):
             db = Database()
             result = db.validate_api_key(api_key)
             if result["valid"]:
-                return {"auth_type": "api_key", "user_id": result["user_id"]}
+                # Get user info from database
+                user = db.users.find_one({"_id": result["user_id"]})
+                return {
+                    "auth_type": "api_key",
+                    "user_id": result["user_id"],
+                    "email": user.get("email") if user else None,
+                    "name": user.get("display_name") if user else None
+                }
         except Exception as e:
             logger.error(f"API key validation error: {e}")
     
     # Check for OAuth cookie or header
     user = await get_current_user(request)
     if user:
-        return {"auth_type": "oauth", **user}
+        return {
+            "auth_type": "oauth",
+            "user_id": user.get("user_id"),
+            "email": user.get("email"),
+            "name": user.get("name")
+        }
     
     # If no auth, raise exception
     raise HTTPException(status_code=401, detail="Authentication required")
