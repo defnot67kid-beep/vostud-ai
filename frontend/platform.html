@@ -746,6 +746,53 @@
             margin-right: 10px;
         }
 
+        /* Usage Bar */
+        .usage-bar-container {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            height: 20px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .usage-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4ade80, #fbbf24, #f87171);
+            border-radius: 8px;
+            transition: width 0.5s ease;
+            width: 0%;
+        }
+
+        .usage-bar-text {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 2px;
+        }
+
+        .tier-badge {
+            display: inline-block;
+            padding: 2px 12px;
+            border-radius: 10px;
+            font-size: 0.7em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .tier-free {
+            background: rgba(74, 222, 128, 0.2);
+            color: #4ade80;
+        }
+
+        .tier-pro {
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+        }
+
+        .tier-enterprise {
+            background: rgba(240, 147, 251, 0.2);
+            color: #f093fb;
+        }
+
         @media (max-width: 768px) {
             .header {
                 flex-direction: column;
@@ -844,6 +891,7 @@
                 <span id="userDisplay" style="display: none; color: #aaa; display: flex; align-items: center; gap: 10px;">
                     <img id="userAvatar" src="" alt="Avatar" style="width: 32px; height: 32px; border-radius: 50%;">
                     <span id="usernameDisplay"></span>
+                    <span id="userTierBadge" class="tier-badge tier-free">FREE</span>
                 </span>
                 <button class="btn btn-secondary" id="logoutBtn" style="display: none;" onclick="logout()">Logout</button>
             </div>
@@ -889,6 +937,7 @@
                 <button class="tab" data-tab="upload" onclick="switchTab('upload')">📄 Upload</button>
                 <button class="tab" data-tab="chat" onclick="switchTab('chat')">💬 Chat</button>
                 <button class="tab" data-tab="analytics" onclick="switchTab('analytics')">📈 Analytics</button>
+                <button class="tab" data-tab="usage" onclick="switchTab('usage')">📊 Usage</button>
             </div>
 
             <!-- ===== TAB: Overview ===== -->
@@ -1023,7 +1072,6 @@
                     <h3>📈 API Usage Analytics</h3>
                     <p style="color: #888; margin-bottom: 15px;">Track your API usage, model performance, and request patterns.</p>
                     
-                    <!-- Controls -->
                     <div class="analytics-controls">
                         <select id="analyticsDays" onchange="loadAnalytics()">
                             <option value="7">Last 7 days</option>
@@ -1044,7 +1092,6 @@
                         <button class="btn btn-secondary" onclick="downloadAnalyticsCSV()">📥 Export CSV</button>
                     </div>
                     
-                    <!-- Stats Overview -->
                     <div class="stats-overview" id="statsOverview">
                         <div class="stat-box">
                             <div class="stat-value" id="totalRequests">0</div>
@@ -1064,34 +1111,28 @@
                         </div>
                     </div>
                     
-                    <!-- Charts Grid -->
                     <div class="analytics-grid">
-                        <!-- Daily Usage Chart -->
                         <div class="chart-container">
                             <h4>📊 Daily Requests</h4>
                             <canvas id="dailyChart"></canvas>
                         </div>
                         
-                        <!-- Model Usage Chart -->
                         <div class="chart-container">
                             <h4>🤖 Model Distribution</h4>
                             <canvas id="modelChart"></canvas>
                         </div>
                         
-                        <!-- API Usage Chart -->
                         <div class="chart-container">
                             <h4>🔌 API Distribution</h4>
                             <canvas id="apiChart"></canvas>
                         </div>
                         
-                        <!-- Request Size Chart -->
                         <div class="chart-container">
                             <h4>📦 Request Sizes</h4>
                             <canvas id="sizeChart"></canvas>
                         </div>
                     </div>
                     
-                    <!-- Detailed Logs -->
                     <div class="card" style="margin-top: 20px;">
                         <h4>📋 Detailed Usage Logs</h4>
                         <div class="table-container">
@@ -1113,6 +1154,62 @@
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: Usage ===== -->
+            <div class="tab-content" id="tab-usage">
+                <div class="card">
+                    <h3>📊 Usage & Limits</h3>
+                    <p style="color: #888; margin-bottom: 15px;">Track your token usage and rate limits.</p>
+                    
+                    <div class="stats-overview" id="usageStatsOverview">
+                        <div class="stat-box">
+                            <div class="stat-value" id="usageTier">FREE</div>
+                            <div class="stat-label">Your Tier</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="usageTokens">0</div>
+                            <div class="stat-label">Tokens Used (Monthly)</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="usageRequests">0</div>
+                            <div class="stat-label">Requests (Daily)</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="usageRemaining">100%</div>
+                            <div class="stat-label">Remaining</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <h4>📊 Token Usage Progress</h4>
+                        <div style="margin-top: 10px;">
+                            <div style="display: flex; justify-content: space-between; color: #888; font-size: 0.85em;">
+                                <span>Monthly Tokens</span>
+                                <span id="usageTokensText">0 / 100,000</span>
+                            </div>
+                            <div class="usage-bar-container">
+                                <div class="usage-bar" id="usageBar" style="width: 0%;"></div>
+                            </div>
+                            <div class="usage-bar-text" id="usagePercentText">0% used</div>
+                        </div>
+                        
+                        <div style="margin-top: 15px;">
+                            <div style="display: flex; justify-content: space-between; color: #888; font-size: 0.85em;">
+                                <span>Daily Requests</span>
+                                <span id="usageDailyText">0 / 500</span>
+                            </div>
+                            <div class="usage-bar-container">
+                                <div class="usage-bar" id="usageDailyBar" style="width: 0%;"></div>
+                            </div>
+                            <div class="usage-bar-text" id="usageDailyPercent">0% used</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="loadUsageStats()">🔄 Refresh Usage</button>
                     </div>
                 </div>
             </div>
@@ -1164,7 +1261,6 @@
             window.location.href = `${API_URL}/auth/google`;
         }
 
-        // Check OAuth session via cookie
         async function checkOAuthSession() {
             try {
                 const response = await fetch(`${API_URL}/auth/me`, {
@@ -1181,8 +1277,16 @@
                             document.getElementById('userAvatar').style.display = 'inline-block';
                         }
                         document.getElementById('userDisplay').style.display = 'flex';
+                        
+                        // Update tier badge
+                        const tier = currentUser.tier || 'free';
+                        const tierBadge = document.getElementById('userTierBadge');
+                        tierBadge.textContent = tier.toUpperCase();
+                        tierBadge.className = `tier-badge tier-${tier}`;
+                        
                         showDashboard();
                         loadDashboardData();
+                        loadUsageStats();
                         return true;
                     }
                 }
@@ -1192,7 +1296,6 @@
             return false;
         }
 
-        // API Key login
         document.getElementById('authForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const apiKey = document.getElementById('authApiKey').value.trim();
@@ -1204,7 +1307,6 @@
                 return;
             }
 
-            // Test the key
             fetch(`${API_URL}/keys`, {
                 headers: { 'X-API-Key': apiKey }
             }).then(response => {
@@ -1246,6 +1348,7 @@
                 authToken = key;
                 showDashboard();
                 loadDashboardData();
+                loadUsageStats();
                 return;
             }
 
@@ -1284,6 +1387,7 @@
             if (tabName === 'models') loadModels();
             if (tabName === 'overview') loadDashboardData();
             if (tabName === 'analytics') loadAnalytics();
+            if (tabName === 'usage') loadUsageStats();
         }
 
         // ============================================
@@ -1318,6 +1422,13 @@
                     throw new Error('Unauthorized');
                 }
                 return apiRequest(endpoint, method, body);
+            }
+
+            // Handle rate limiting
+            if (response.status === 429) {
+                const data = await response.json();
+                showToast(`⏳ ${data.detail || 'Rate limit exceeded. Please wait.'}`, 'error');
+                throw new Error('Rate limit exceeded');
             }
 
             const data = await response.json();
@@ -1652,10 +1763,18 @@
 
                 if (response.ok) {
                     chatBox.innerHTML += `<div class="bot-msg">🤖 Vostud AI: ${data.response}</div>`;
+                    if (data.tokens_used) {
+                        chatBox.innerHTML += `<div class="bot-msg" style="font-size: 0.7em; color: #666;">⚡ Tokens: ${data.tokens_used}</div>`;
+                    }
                 } else {
                     chatBox.innerHTML += `<div class="bot-msg" style="color: #f87171;">❌ Error: ${data.detail || 'Unknown error'}</div>`;
                 }
                 chatBox.scrollTop = chatBox.scrollHeight;
+                
+                // Refresh usage after chat
+                if (document.getElementById('tab-usage').classList.contains('active')) {
+                    loadUsageStats();
+                }
             } catch (error) {
                 const thinkingEl = document.getElementById(thinkingId);
                 if (thinkingEl) thinkingEl.remove();
@@ -1671,7 +1790,6 @@
             const days = document.getElementById('analyticsDays').value;
             
             try {
-                // Show loading state
                 document.getElementById('statsOverview').innerHTML = `
                     <div class="loading-overlay" style="grid-column: 1 / -1; min-height: 100px;">
                         <div class="spinner"></div>
@@ -1971,6 +2089,49 @@
             } catch (error) {
                 console.error('Failed to download CSV:', error);
                 showToast('Failed to download analytics data.', 'error');
+            }
+        }
+
+        // ============================================
+        // USAGE STATS
+        // ============================================
+        async function loadUsageStats() {
+            try {
+                const response = await apiRequest('/usage');
+                const data = response;
+                
+                // Update tier
+                const tier = data.tier || 'free';
+                document.getElementById('usageTier').textContent = tier.toUpperCase();
+                
+                // Update usage numbers
+                const monthlyTokens = data.usage?.monthly?.tokens_used || 0;
+                const dailyRequests = data.usage?.daily?.requests || 0;
+                const monthlyLimit = data.limits?.tokens_per_month || 100000;
+                const dailyLimit = data.limits?.requests_per_day || 500;
+                
+                document.getElementById('usageTokens').textContent = monthlyTokens.toLocaleString();
+                document.getElementById('usageRequests').textContent = dailyRequests;
+                
+                // Calculate percentages
+                const tokenPercent = Math.min((monthlyTokens / monthlyLimit) * 100, 100);
+                const requestPercent = Math.min((dailyRequests / dailyLimit) * 100, 100);
+                const remaining = Math.max(100 - tokenPercent, 0);
+                
+                document.getElementById('usageRemaining').textContent = remaining.toFixed(0) + '%';
+                
+                // Update bars
+                document.getElementById('usageBar').style.width = tokenPercent + '%';
+                document.getElementById('usageTokensText').textContent = `${monthlyTokens.toLocaleString()} / ${monthlyLimit.toLocaleString()}`;
+                document.getElementById('usagePercentText').textContent = tokenPercent.toFixed(1) + '% used';
+                
+                document.getElementById('usageDailyBar').style.width = requestPercent + '%';
+                document.getElementById('usageDailyText').textContent = `${dailyRequests} / ${dailyLimit}`;
+                document.getElementById('usageDailyPercent').textContent = requestPercent.toFixed(1) + '% used';
+                
+            } catch (error) {
+                console.error('Failed to load usage stats:', error);
+                document.getElementById('usageTokens').textContent = 'Error';
             }
         }
 
