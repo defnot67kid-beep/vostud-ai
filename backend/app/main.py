@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import uuid
 import mimetypes
 import logging
+import json
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -416,44 +417,90 @@ async def generate_api_key(
     auth: dict = Depends(require_api_key_or_oauth)
 ):
     """Generate a new API key"""
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-    
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    
-    result = db.create_api_key(
-        user_id=user_id,
-        name=request.name,
-        expires_in_days=request.expires_in_days
-    )
-    
-    return result
+    try:
+        if not db:
+            logger.error("❌ Database not available")
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        user_id = auth.get("user_id") or auth.get("sub")
+        if not user_id:
+            logger.error("❌ User ID not found in auth")
+            raise HTTPException(status_code=400, detail="User ID not found")
+        
+        logger.info(f"🔑 Generating API key for user: {user_id}")
+        logger.info(f"📝 Key name: {request.name}")
+        logger.info(f"📅 Expires in: {request.expires_in_days} days")
+        
+        # Ensure the user exists in the database
+        user = db.users.find_one({"_id": user_id})
+        if not user:
+            logger.error(f"❌ User not found: {user_id}")
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        result = db.create_api_key(
+            user_id=user_id,
+            name=request.name or f"Key for {user.get('email', user_id)}",
+            expires_in_days=request.expires_in_days
+        )
+        
+        if not result:
+            logger.error("❌ Failed to create API key")
+            raise HTTPException(status_code=500, detail="Failed to create API key")
+        
+        logger.info(f"✅ API key generated: {result['key_prefix']}")
+        
+        return CreateKeyResponse(
+            api_key=result["api_key"],
+            key_prefix=result["key_prefix"],
+            user_id=result["user_id"],
+            expires_at=result["expires_at"].isoformat() if hasattr(result["expires_at"], 'isoformat') else str(result["expires_at"])
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Key generation error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Key generation failed: {str(e)}")
 
 @app.get("/keys")
 async def list_api_keys(
     auth: dict = Depends(require_api_key_or_oauth)
 ):
     """List all API keys for the user"""
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-    
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    
-    keys = db.api_keys.find({"user_id": user_id})
-    
-    return [{
-        "key_prefix": k.get("key_prefix"),
-        "name": k.get("name"),
-        "status": k.get("status"),
-        "created_at": k.get("created_at"),
-        "expires_at": k.get("expires_at"),
-        "last_used": k.get("last_used"),
-        "usage_count": k.get("usage_count", 0)
-    } for k in keys]
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        user_id = auth.get("user_id") or auth.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="User ID not found")
+        
+        logger.info(f"🔑 Listing API keys for user: {user_id}")
+        
+        # Find all keys for this user
+        keys = list(db.api_keys.find({"user_id": user_id}))
+        
+        logger.info(f"📊 Found {len(keys)} keys")
+        
+        return [{
+            "key_prefix": k.get("key_prefix"),
+            "name": k.get("name"),
+            "status": k.get("status"),
+            "created_at": k.get("created_at"),
+            "expires_at": k.get("expires_at"),
+            "last_used": k.get("last_used"),
+            "usage_count": k.get("usage_count", 0)
+        } for k in keys]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ List keys error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to list keys: {str(e)}")
 
 @app.delete("/keys/{key_prefix}")
 async def revoke_api_key(
@@ -461,61 +508,92 @@ async def revoke_api_key(
     auth: dict = Depends(require_api_key_or_oauth)
 ):
     """Revoke an API key"""
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-    
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    
-    # Find the key
-    key_doc = db.api_keys.find_one({
-        "user_id": user_id,
-        "key_prefix": key_prefix
-    })
-    
-    if not key_doc:
-        raise HTTPException(404, "Key not found")
-    
-    # Revoke it
-    db.api_keys.update_one(
-        {"_id": key_doc["_id"]},
-        {"$set": {"status": "revoked"}}
-    )
-    
-    return {"message": "API key revoked"}
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        user_id = auth.get("user_id") or auth.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="User ID not found")
+        
+        logger.info(f"🔑 Revoking API key: {key_prefix} for user: {user_id}")
+        
+        # Find the key
+        key_doc = db.api_keys.find_one({
+            "user_id": user_id,
+            "key_prefix": key_prefix
+        })
+        
+        if not key_doc:
+            logger.warning(f"⚠️ Key not found: {key_prefix}")
+            raise HTTPException(404, "Key not found")
+        
+        # Revoke it
+        result = db.api_keys.update_one(
+            {"_id": key_doc["_id"]},
+            {"$set": {"status": "revoked"}}
+        )
+        
+        if result.modified_count > 0:
+            logger.info(f"✅ Key revoked: {key_prefix}")
+            return {"message": "API key revoked"}
+        else:
+            logger.warning(f"⚠️ Key not modified: {key_prefix}")
+            return {"message": "Key already revoked or not found"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Revoke key error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to revoke key: {str(e)}")
 
 @app.get("/keys/stats")
 async def get_usage_stats(
     auth: dict = Depends(require_api_key_or_oauth)
 ):
     """Get usage statistics for API key"""
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-    
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    
-    stats = db.usage_logs.aggregate([
-        {"$match": {"user_id": user_id}},
-        {"$group": {
-            "_id": None,
-            "total_requests": {"$sum": 1},
-            "last_24h": {
-                "$sum": {
-                    "$cond": [
-                        {"$gte": ["$timestamp", datetime.utcnow() - timedelta(hours=24)]},
-                        1,
-                        0
-                    ]
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        user_id = auth.get("user_id") or auth.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="User ID not found")
+        
+        logger.info(f"📊 Getting stats for user: {user_id}")
+        
+        # Get stats from usage logs
+        stats = list(db.usage_logs.aggregate([
+            {"$match": {"user_id": user_id}},
+            {"$group": {
+                "_id": None,
+                "total_requests": {"$sum": 1},
+                "last_24h": {
+                    "$sum": {
+                        "$cond": [
+                            {"$gte": ["$timestamp", datetime.utcnow() - timedelta(hours=24)]},
+                            1,
+                            0
+                        ]
+                    }
                 }
-            }
-        }}
-    ])
-    
-    result = list(stats)
-    return result[0] if result else {"total_requests": 0, "last_24h": 0}
+            }}
+        ]))
+        
+        result = stats[0] if stats else {"total_requests": 0, "last_24h": 0}
+        logger.info(f"📊 Stats: {result}")
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Stats error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
 
 # ============================================
 # CHAT ENDPOINTS
@@ -815,6 +893,21 @@ async def not_found_handler(request: Request, exc):
     return HTMLResponse(
         content=f"<h1>404 - Page not found</h1><p>The requested path '{path}' does not exist.</p>",
         status_code=404
+    )
+
+# ============================================
+# ERROR HANDLERS
+# ============================================
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler to return JSON instead of HTML"""
+    logger.error(f"❌ Global error: {exc}")
+    import traceback
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal Server Error: {str(exc)}"}
     )
 
 # ============================================
