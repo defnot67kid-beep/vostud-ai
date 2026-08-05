@@ -132,6 +132,112 @@ except Exception as e:
 app.add_middleware(RateLimitMiddleware, db=db, token_tracker=token_tracker)
 
 # ============================================
+# VALID MODELS LIST
+# ============================================
+
+VALID_MODELS = [
+    # Vostud Branded Models
+    "auto",
+    "vostud-2.5-pro",
+    "vostud-2.5-flash",
+    "vostud-2.0-pro",
+    "vostud-2.0-flash",
+    "vostud-1.5-pro",
+    "vostud-1.5-flash",
+    "vostud-pro",
+    "vostud-flash",
+    "vostud-local",
+    # Raw API Models
+    "groq/llama-3.3-70b-versatile",
+    "groq/llama-3.1-70b-versatile",
+    "groq/llama-3.1-8b-instant",
+    "groq/gemma2-9b-it",
+    "gemini/gemini-2.0-flash",
+    "gemini/gemini-1.5-flash",
+    "gemini/gemini-1.5-pro",
+    "openrouter/google/gemini-2.0-flash-lite-preview-02-05:free",
+    "openrouter/google/gemini-flash-1.5:free",
+    "openrouter/microsoft/phi-3-mini-128k-instruct:free",
+    "openrouter/meta-llama/llama-3.2-3b-instruct:free",
+    "openrouter/mistralai/mistral-7b-instruct:free",
+    "openai/gpt-3.5-turbo",
+    "openai/gpt-4",
+    "ollama/llama2:latest"
+]
+
+# ============================================
+# MODEL VALIDATION FUNCTION
+# ============================================
+
+def validate_model(model: str) -> tuple:
+    """
+    Validate the model parameter.
+    Returns (is_valid, error_message, actual_model)
+    """
+    if not model:
+        return False, "⚠️ Model selection required. Please specify a model or use 'auto' for automatic selection.", None
+    
+    if model == "auto":
+        return True, None, "auto"
+    
+    # Check if it's a valid model
+    if model in VALID_MODELS:
+        return True, None, model
+    
+    # Check if it's a Vostud model (without the "vostud-" prefix check)
+    if model.startswith("vostud-"):
+        # Map to full model name if valid
+        full_model = f"vostud-{model.replace('vostud-', '')}"
+        if full_model in VALID_MODELS:
+            return True, None, full_model
+    
+    # Check if it's a raw API model
+    if "/" in model:
+        # Check if any valid model ends with this
+        for valid in VALID_MODELS:
+            if valid.endswith(model) or model in valid:
+                return True, None, valid
+    
+    # Invalid model - return professional error
+    return False, f"""❌ Invalid Model Selection
+
+The model '{model}' is not available in Vostud AI.
+
+Available models:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🤖 AUTO MODE:
+  • auto (Recommended - automatically selects the best model)
+
+🌟 VOSTUD MODELS (Recommended):
+  • vostud-2.5-pro   - Highest quality, complex reasoning
+  • vostud-2.5-flash - Fast, high quality
+  • vostud-2.0-pro   - Google Gemini Pro, research
+  • vostud-2.0-flash - Google Gemini Flash, speed
+  • vostud-1.5-pro   - Qwen 2.5, quality
+  • vostud-1.5-flash - Llama 3.2, fast
+  • vostud-pro       - OpenAI GPT-4 (paid)
+  • vostud-flash     - OpenAI GPT-3.5 (paid)
+  • vostud-local     - Local Ollama (privacy)
+
+🔌 RAW API MODELS (Advanced):
+  • groq/llama-3.3-70b-versatile
+  • groq/llama-3.1-70b-versatile
+  • groq/llama-3.1-8b-instant
+  • groq/gemma2-9b-it
+  • gemini/gemini-2.0-flash
+  • gemini/gemini-1.5-flash
+  • gemini/gemini-1.5-pro
+  • openai/gpt-3.5-turbo
+  • openai/gpt-4
+  • ollama/llama2:latest
+
+💡 Tip: Use 'auto' for automatic model selection based on your query.
+   Example: {{"model": "auto"}}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Please specify a valid model in your request.""", None
+
+# ============================================
 # PYDANTIC MODELS
 # ============================================
 
@@ -140,7 +246,7 @@ class ChatRequest(BaseModel):
     history: Optional[List[Dict]] = None
     use_rag: bool = True
     model: Optional[str] = None
-    format: Optional[str] = None
+    format: Optional[str] = None  # 'source_only', 'concise', 'detailed'
 
 class ChatResponse(BaseModel):
     response: str
@@ -168,7 +274,7 @@ class CreateKeyResponse(BaseModel):
     expires_at: str
 
 class ModeSwitchRequest(BaseModel):
-    mode: str
+    mode: str  # coding, research, organize, compare, summary
 
 # ============================================
 # FRONTEND ROUTES
@@ -514,26 +620,46 @@ async def chat(
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
+    # ============================================
+    # VALIDATE MODEL
+    # ============================================
+    model_to_use = chat_request.model
+    
+    # If no model specified, try to get from auth or default to auto
+    if not model_to_use:
+        model_to_use = auth.get("default_model", "auto")
+    
+    is_valid, error_message, actual_model = validate_model(model_to_use)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_message)
+    
+    # If model is "auto", let the engine decide
+    if actual_model == "auto":
+        actual_model = None  # Let engine auto-select
+    
     user_id = auth.get("user_id") or auth.get("sub")
     tier = auth.get("tier", "free")
     
+    # Check token usage limits
     can_proceed, message = await token_tracker.check_limit(user_id, tier)
     if not can_proceed:
         raise HTTPException(status_code=429, detail=message)
     
     try:
+        # Estimate tokens
         tokens_used = len(chat_request.message) // 4
         
         response = chat_engine.generate_response(
             user_message=chat_request.message,
             conversation_history=chat_request.history,
             use_rag=chat_request.use_rag,
-            model_override=chat_request.model
+            model_override=actual_model
         )
         
         tokens_used += len(response) // 4
         model_used = chat_engine.current_api or "unknown"
         
+        # Track usage
         await token_tracker.track_usage(
             user_id=user_id,
             tokens_used=tokens_used,
@@ -542,6 +668,7 @@ async def chat(
             cost=tokens_used * 0.000002
         )
         
+        # Format response if requested
         if chat_request.format == "source_only":
             response = extract_sources_only(response)
         elif chat_request.format == "concise":
@@ -573,12 +700,21 @@ async def chat_public(request: Request, chat_request: ChatRequest):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
+    # Validate model for public endpoint too
+    model_to_use = chat_request.model or "auto"
+    is_valid, error_message, actual_model = validate_model(model_to_use)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_message)
+    
+    if actual_model == "auto":
+        actual_model = None
+    
     try:
         response = chat_engine.generate_response(
             user_message=chat_request.message,
             conversation_history=chat_request.history,
             use_rag=chat_request.use_rag,
-            model_override=chat_request.model
+            model_override=actual_model
         )
         return {"response": response}
     except Exception as e:
@@ -587,16 +723,29 @@ async def chat_public(request: Request, chat_request: ChatRequest):
 
 @app.post("/chat/sources")
 @limiter.limit("10 per hour")
-async def get_sources_only(request: Request, chat_request: ChatRequest, auth: dict = Depends(require_api_key_or_oauth)):
+async def get_sources_only(
+    request: Request,
+    chat_request: ChatRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    # Validate model
+    model_to_use = chat_request.model or "auto"
+    is_valid, error_message, actual_model = validate_model(model_to_use)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_message)
+    
+    if actual_model == "auto":
+        actual_model = None
     
     try:
         response = chat_engine.generate_response(
             user_message=chat_request.message,
             conversation_history=chat_request.history,
             use_rag=chat_request.use_rag,
-            model_override=chat_request.model
+            model_override=actual_model
         )
         
         import re
@@ -666,7 +815,11 @@ async def get_current_mode(auth: dict = Depends(require_api_key_or_oauth)):
 
 @app.post("/upload")
 @limiter.limit("20 per hour")
-async def upload_document(request: Request, file: UploadFile = File(...), auth: dict = Depends(require_api_key_or_oauth)):
+async def upload_document(
+    request: Request,
+    file: UploadFile = File(...),
+    auth: dict = Depends(require_api_key_or_oauth)
+):
     if not rag_engine:
         raise HTTPException(status_code=400, detail="RAG engine not available")
     
@@ -700,7 +853,11 @@ async def upload_document(request: Request, file: UploadFile = File(...), auth: 
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/add-text")
-async def add_text(text: str, metadata: Optional[Dict] = None, auth: dict = Depends(require_api_key_or_oauth)):
+async def add_text(
+    text: str,
+    metadata: Optional[Dict] = None,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
     if not rag_engine:
         raise HTTPException(status_code=400, detail="RAG engine not available")
     
@@ -723,7 +880,11 @@ async def add_text(text: str, metadata: Optional[Dict] = None, auth: dict = Depe
 
 @app.post("/quiz")
 @limiter.limit("10 per hour")
-async def generate_quiz(request: Request, quiz_request: QuizRequest, auth: dict = Depends(require_api_key_or_oauth)):
+async def generate_quiz(
+    request: Request,
+    quiz_request: QuizRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
@@ -767,7 +928,10 @@ async def get_models(auth: dict = Depends(require_api_key_or_oauth)):
     }
 
 @app.post("/models/switch")
-async def switch_model(request: ModelSwitchRequest, auth: dict = Depends(require_api_key_or_oauth)):
+async def switch_model(
+    request: ModelSwitchRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
     if not chat_engine or not chat_engine.model_switcher:
         raise HTTPException(status_code=503, detail="Model switcher not available")
     result = chat_engine.model_switcher.set_model(request.model)
@@ -778,7 +942,10 @@ async def switch_model(request: ModelSwitchRequest, auth: dict = Depends(require
     }
 
 @app.post("/models/auto")
-async def set_auto_mode(enabled: bool = True, auth: dict = Depends(require_api_key_or_oauth)):
+async def set_auto_mode(
+    enabled: bool = True,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
     if not chat_engine or not chat_engine.model_switcher:
         raise HTTPException(status_code=503, detail="Model switcher not available")
     result = chat_engine.model_switcher.set_auto_mode(enabled)
@@ -802,7 +969,10 @@ async def switch_next(auth: dict = Depends(require_api_key_or_oauth)):
 # ============================================
 
 @app.get("/analytics/stats")
-async def get_analytics_stats(days: int = 30, auth: dict = Depends(require_api_key_or_oauth)):
+async def get_analytics_stats(
+    days: int = 30,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     user_id = auth.get("user_id") or auth.get("sub")
@@ -816,7 +986,10 @@ async def get_analytics_stats(days: int = 30, auth: dict = Depends(require_api_k
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/analytics/details")
-async def get_analytics_details(days: int = 30, auth: dict = Depends(require_api_key_or_oauth)):
+async def get_analytics_details(
+    days: int = 30,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     user_id = auth.get("user_id") or auth.get("sub")
@@ -844,7 +1017,10 @@ async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
     return {
         "tier": tier,
         "limits": TIER_LIMITS.get(tier, TIER_LIMITS["free"]),
-        "usage": {"monthly": usage, "daily": daily_usage}
+        "usage": {
+            "monthly": usage,
+            "daily": daily_usage
+        }
     }
 
 @app.get("/usage/check")
