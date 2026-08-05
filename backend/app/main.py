@@ -12,6 +12,7 @@ import uuid
 import logging
 import json
 import hashlib
+import re
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -132,6 +133,43 @@ except Exception as e:
 app.add_middleware(RateLimitMiddleware, db=db, token_tracker=token_tracker)
 
 # ============================================
+# PROFANITY FILTER
+# ============================================
+
+PROFANITY_LIST = [
+    # Racial slurs
+    "nigger", "nigga", "chink", "gook", "spic", "wetback", "kike",
+    "faggot", "dyke", "tranny", "retard",
+    # Profanity
+    "fuck", "shit", "cunt", "pussy", "dick", "asshole", "bastard", 
+    "bitch", "whore", "slut", "cocksucker", "motherfucker",
+    # Hate speech
+    "hate", "racist", "sexist", "homophobic", "transphobic",
+    # Threats
+    "kill", "murder", "rape", "abuse", "torture", "bomb", "explosive",
+    "weapon", "gun", "knife", "attack", "hurt", "destroy"
+]
+
+def contains_profanity(text: str) -> bool:
+    """Check if text contains profanity"""
+    if not text:
+        return False
+    text_lower = text.lower()
+    # Use regex to match whole words only
+    pattern = r'\b(?:' + '|'.join(re.escape(word) for word in PROFANITY_LIST) + r')\b'
+    return bool(re.search(pattern, text_lower))
+
+def contains_profanity_loose(text: str) -> bool:
+    """Check if text contains profanity (loose matching)"""
+    if not text:
+        return False
+    text_lower = text.lower()
+    for word in PROFANITY_LIST:
+        if word in text_lower:
+            return True
+    return False
+
+# ============================================
 # VALID MODELS LIST
 # ============================================
 
@@ -176,6 +214,10 @@ def validate_model(model: str) -> tuple:
     """
     if not model:
         return False, "⚠️ Model selection required. Please specify a model or use 'auto' for automatic selection.", None
+    
+    # Check for profanity in model name
+    if contains_profanity_loose(model):
+        return False, "❌ Invalid model name. Please use a valid model from the list below.", None
     
     if model == "auto":
         return True, None, "auto"
@@ -621,6 +663,15 @@ async def chat(
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
     # ============================================
+    # CHECK FOR PROFANITY IN MESSAGE
+    # ============================================
+    if contains_profanity(chat_request.message):
+        raise HTTPException(
+            status_code=400, 
+            detail="❌ Your message contains inappropriate language. Please keep the conversation professional."
+        )
+    
+    # ============================================
     # VALIDATE MODEL
     # ============================================
     model_to_use = chat_request.model
@@ -700,6 +751,13 @@ async def chat_public(request: Request, chat_request: ChatRequest):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
+    # Check for profanity
+    if contains_profanity(chat_request.message):
+        raise HTTPException(
+            status_code=400, 
+            detail="❌ Your message contains inappropriate language. Please keep the conversation professional."
+        )
+    
     # Validate model for public endpoint too
     model_to_use = chat_request.model or "auto"
     is_valid, error_message, actual_model = validate_model(model_to_use)
@@ -730,6 +788,13 @@ async def get_sources_only(
 ):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    # Check for profanity
+    if contains_profanity(chat_request.message):
+        raise HTTPException(
+            status_code=400, 
+            detail="❌ Your message contains inappropriate language. Please keep the conversation professional."
+        )
     
     # Validate model
     model_to_use = chat_request.model or "auto"
@@ -861,6 +926,13 @@ async def add_text(
     if not rag_engine:
         raise HTTPException(status_code=400, detail="RAG engine not available")
     
+    # Check for profanity in text
+    if contains_profanity(text):
+        raise HTTPException(
+            status_code=400, 
+            detail="❌ Your text contains inappropriate language. Please keep the content professional."
+        )
+    
     user_id = auth.get("user_id") or auth.get("sub")
     
     try:
@@ -887,6 +959,13 @@ async def generate_quiz(
 ):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    # Check for profanity in topic
+    if contains_profanity(quiz_request.topic):
+        raise HTTPException(
+            status_code=400, 
+            detail="❌ Your topic contains inappropriate language. Please keep the content professional."
+        )
     
     try:
         quiz = chat_engine.generate_quiz(
