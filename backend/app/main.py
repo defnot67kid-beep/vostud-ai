@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse, FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, EmailStr
 from typing import List, Dict, Optional
@@ -10,12 +9,10 @@ import shutil
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import uuid
-import mimetypes
 import logging
 import json
 import hashlib
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -27,13 +24,13 @@ load_dotenv()
 app = FastAPI(title="Vostud AI API")
 
 # ============================================
-# SESSION MIDDLEWARE (Required for OAuth)
+# SESSION MIDDLEWARE
 # ============================================
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("JWT_SECRET_KEY", "your_super_secret_key_change_this_to_a_long_random_string"),
     session_cookie="vostud_session",
-    max_age=3600,  # 1 hour
+    max_age=3600,
     same_site="lax",
     https_only=True,
 )
@@ -52,17 +49,13 @@ app.add_middleware(
 )
 
 # ============================================
-# STATIC FILES (Frontend)
+# STATIC FILES
 # ============================================
-# Get the absolute path to the frontend directory
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
 
-# Ensure frontend directory exists
 if not os.path.exists(FRONTEND_DIR):
     FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
-    if not os.path.exists(FRONTEND_DIR):
-        logger.warning(f"⚠️ Frontend directory not found at: {FRONTEND_DIR}")
 
 logger.info(f"📁 Frontend directory: {FRONTEND_DIR}")
 
@@ -103,14 +96,13 @@ oauth = setup_oauth(app)
 if oauth:
     logger.info("✅ OAuth setup complete")
 else:
-    logger.warning("⚠️ OAuth setup failed - check Google credentials")
+    logger.warning("⚠️ OAuth setup failed")
 
 # ============================================
 # INITIALIZE ENGINES
 # ============================================
 logger.info("🚀 Starting Vostud AI...")
 
-# Database
 db = None
 try:
     db = Database()
@@ -118,7 +110,6 @@ try:
 except Exception as e:
     logger.error(f"❌ Database connection failed: {e}")
 
-# RAG Engine
 rag_engine = None
 try:
     rag_engine = RAGEngine()
@@ -126,7 +117,6 @@ try:
 except Exception as e:
     logger.error(f"❌ RAG Engine failed: {e}")
 
-# Chat Engine
 chat_engine = None
 try:
     chat_engine = SmartAIEngine()
@@ -150,7 +140,7 @@ class ChatRequest(BaseModel):
     history: Optional[List[Dict]] = None
     use_rag: bool = True
     model: Optional[str] = None
-    format: Optional[str] = None  # 'source_only', 'concise', 'detailed'
+    format: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -178,11 +168,7 @@ class CreateKeyResponse(BaseModel):
     expires_at: str
 
 class ModeSwitchRequest(BaseModel):
-    mode: str  # coding, research, organize, compare, summary
-
-class ModeSwitchResponse(BaseModel):
     mode: str
-    message: str
 
 # ============================================
 # FRONTEND ROUTES
@@ -191,7 +177,6 @@ class ModeSwitchResponse(BaseModel):
 @app.get("/")
 @app.head("/")
 async def root():
-    """Serve the main index.html or API status"""
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
@@ -207,28 +192,16 @@ async def root():
 @app.get("/platform")
 @app.head("/platform")
 async def serve_platform():
-    """Serve the platform dashboard"""
     platform_path = os.path.join(FRONTEND_DIR, "platform.html")
     if os.path.exists(platform_path):
         return FileResponse(platform_path)
     return HTMLResponse(
-        content="""
-        <!DOCTYPE html>
-        <html>
-        <head><title>Vostud AI Platform</title></head>
-        <body style="background: #0f0c29; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; flex-direction: column;">
-            <h1 style="background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">⚡ Vostud AI</h1>
-            <p style="color: #888;">Platform page not found. Please make sure platform.html exists in the frontend directory.</p>
-            <p style="color: #666; font-size: 0.8em;">Try visiting <a href="/" style="color: #667eea;">the main page</a></p>
-        </body>
-        </html>
-        """,
+        content="<h1>Platform page not found</h1>",
         status_code=404
     )
 
 @app.get("/index.html")
 async def serve_index():
-    """Serve index.html"""
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
@@ -240,82 +213,45 @@ async def serve_index():
 
 @app.get("/auth/google")
 async def auth_google(request: Request):
-    """Redirect to Google OAuth"""
     try:
         if not oauth:
-            logger.error("❌ OAuth not configured")
-            raise HTTPException(status_code=503, detail="OAuth not configured - missing credentials")
+            raise HTTPException(status_code=503, detail="OAuth not configured")
         
-        # Generate a random state for CSRF protection
         state = uuid.uuid4().hex
-        logger.info(f"🔐 Generated state: {state}")
-        
-        # Store state in session
         request.session['oauth_state'] = state
-        logger.info(f"🔐 State stored in session")
-        
         redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "https://vostud-ai.onrender.com/auth/google/callback")
-        logger.info(f"🔐 Redirect URI: {redirect_uri}")
-        
-        # Create the authorization URL
         return await oauth.google.authorize_redirect(request, redirect_uri, state=state)
-        
     except Exception as e:
         logger.error(f"❌ OAuth error: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"OAuth error: {str(e)}")
 
 @app.get("/auth/google/callback")
 async def auth_google_callback(request: Request):
-    """Google OAuth callback"""
     try:
         if not oauth:
-            logger.error("❌ OAuth not configured")
-            raise HTTPException(status_code=503, detail="OAuth not configured - missing credentials")
+            raise HTTPException(status_code=503, detail="OAuth not configured")
         
-        # Get state from session and request
         session_state = request.session.get('oauth_state') if request.session else None
         request_state = request.query_params.get("state")
         
-        logger.info(f"🔐 Session state: {session_state}")
-        logger.info(f"🔐 Request state: {request_state}")
-        
-        # Verify state
         if session_state and request_state:
             if session_state != request_state:
-                logger.warning("⚠️ State mismatch - possible CSRF attack")
-                # Try to get token without state verification
                 try:
                     token = await oauth.google.authorize_access_token(request, verify_state=False)
-                    logger.info("✅ Token obtained with verify_state=False")
                 except Exception as e:
-                    logger.error(f"❌ Token error with verify_state=False: {e}")
                     raise HTTPException(status_code=400, detail="CSRF verification failed")
             else:
-                # State matches, get token normally
                 token = await oauth.google.authorize_access_token(request)
-                logger.info("✅ Token obtained with state verification")
         else:
-            # No state to verify, try without verification
-            logger.warning("⚠️ No state to verify, trying without verification")
             token = await oauth.google.authorize_access_token(request, verify_state=False)
-            logger.info("✅ Token obtained with verify_state=False")
         
         if not token:
-            logger.error("❌ No token received from Google")
             raise HTTPException(status_code=400, detail="No token received from Google")
         
-        # Get user info
         user_info = token.get('userinfo')
         if not user_info:
-            logger.error("❌ No user info in token")
-            logger.error(f"Token contents: {token.keys()}")
-            raise HTTPException(status_code=400, detail="Failed to get user info from Google")
+            raise HTTPException(status_code=400, detail="Failed to get user info")
         
-        logger.info(f"👤 User info: {user_info.get('email')}")
-        
-        # Extract user data
         email = user_info.get('email')
         name = user_info.get('name', email.split('@')[0] if email else 'User')
         picture = user_info.get('picture')
@@ -323,17 +259,14 @@ async def auth_google_callback(request: Request):
         family_name = user_info.get('family_name', '')
         
         if not email:
-            logger.error("❌ No email in user info")
             raise HTTPException(status_code=400, detail="No email in user info")
         
-        # Check if user exists in database
         user_id = None
         if db:
             try:
                 existing_user = db.users.find_one({"email": email})
                 
                 if not existing_user:
-                    # Create new user with tier
                     user_doc = {
                         "email": email,
                         "username": name,
@@ -344,14 +277,12 @@ async def auth_google_callback(request: Request):
                         "created_at": datetime.utcnow(),
                         "auth_provider": "google",
                         "last_login": datetime.utcnow(),
-                        "tier": "free"  # Default tier
+                        "tier": "free"
                     }
                     result = db.users.insert_one(user_doc)
                     user_id = str(result.inserted_id)
-                    logger.info(f"✅ New user created: {email}")
                 else:
                     user_id = str(existing_user["_id"])
-                    # Update user info
                     db.users.update_one(
                         {"_id": existing_user["_id"]},
                         {"$set": {
@@ -362,17 +293,12 @@ async def auth_google_callback(request: Request):
                             "family_name": family_name
                         }}
                     )
-                    logger.info(f"✅ Existing user logged in: {email}")
             except Exception as e:
                 logger.error(f"❌ Database error: {e}")
-                # Fallback: generate a user ID
                 user_id = f"user_{uuid.uuid4().hex[:8]}"
         else:
-            # Fallback if database not available
             user_id = f"user_{uuid.uuid4().hex[:8]}"
-            logger.warning(f"⚠️ Database not available, using fallback user_id: {user_id}")
         
-        # Create JWT token with tier
         access_token = create_access_token({
             "sub": user_id,
             "email": email,
@@ -381,18 +307,12 @@ async def auth_google_callback(request: Request):
             "tier": "free"
         })
         
-        logger.info(f"✅ JWT token created for: {email}")
-        
-        # Clear session state
         if request.session and 'oauth_state' in request.session:
             request.session.pop('oauth_state')
-            logger.info("🔐 Session state cleared")
         
-        # Redirect to frontend
         frontend_url = os.getenv("FRONTEND_URL", "https://vostud-ai.onrender.com")
         redirect_url = f"{frontend_url}/platform"
         
-        # Set cookie and redirect
         response = RedirectResponse(url=redirect_url)
         response.set_cookie(
             key="access_token",
@@ -406,29 +326,20 @@ async def auth_google_callback(request: Request):
         return response
         
     except OAuthError as e:
-        logger.error(f"❌ OAuth error: {e}")
         raise HTTPException(status_code=400, detail=f"OAuth error: {str(e)}")
     except Exception as e:
         logger.error(f"❌ Callback error: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
 
 @app.get("/auth/me")
 async def auth_me(request: Request):
-    """Get current user info"""
     user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    return {
-        "authenticated": True,
-        "user": user
-    }
+    return {"authenticated": True, "user": user}
 
 @app.post("/auth/logout")
 async def auth_logout():
-    """Logout user"""
     response = JSONResponse({"message": "Logged out successfully"})
     response.delete_cookie("access_token")
     return response
@@ -444,46 +355,30 @@ async def generate_api_key(
     create_request: CreateKeyRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Generate a new API key - auto-creates user if not found"""
     try:
         if not db:
-            logger.error("❌ Database not available")
             raise HTTPException(status_code=503, detail="Database not available")
         
-        # Get user info from auth
         user_id = auth.get("user_id") or auth.get("sub")
         email = auth.get("email")
         name = auth.get("name") or "User"
         
         if not user_id:
-            logger.error("❌ User ID not found in auth")
             raise HTTPException(status_code=400, detail="User ID not found")
         
-        logger.info(f"🔑 Generating API key for user: {user_id}")
-        logger.info(f"📝 Key name: {create_request.name}")
-        logger.info(f"📅 Expires in: {create_request.expires_in_days} days")
-        
-        # Try to find the user by ID first
         user = None
         try:
             from bson import ObjectId
             user = db.users.find_one({"_id": ObjectId(user_id)})
         except:
-            # If ObjectId conversion fails, try as string
             user = db.users.find_one({"_id": user_id})
         
-        # If user not found by ID, try by email
         if not user and email:
             user = db.users.find_one({"email": email})
             if user:
-                logger.info(f"👤 Found user by email: {email}")
                 user_id = str(user["_id"])
         
-        # If user still not found, create a new user
         if not user:
-            logger.warning(f"⚠️ User not found, creating new user: {email or user_id}")
-            
-            # Create user document
             user_doc = {
                 "email": email or f"{user_id}@temp.user",
                 "username": name,
@@ -493,14 +388,10 @@ async def generate_api_key(
                 "last_login": datetime.utcnow(),
                 "tier": "free"
             }
-            
-            # Insert the user
             result = db.users.insert_one(user_doc)
             user_id = str(result.inserted_id)
-            logger.info(f"✅ New user created with ID: {user_id}")
             user = user_doc
         
-        # Now generate the API key for the (now confirmed) user
         result = db.create_api_key(
             user_id=user_id,
             name=create_request.name or f"Key for {user.get('email', user_id)}",
@@ -508,10 +399,7 @@ async def generate_api_key(
         )
         
         if not result:
-            logger.error("❌ Failed to create API key")
             raise HTTPException(status_code=500, detail="Failed to create API key")
-        
-        logger.info(f"✅ API key generated: {result['key_prefix']}")
         
         return CreateKeyResponse(
             api_key=result["api_key"],
@@ -519,20 +407,12 @@ async def generate_api_key(
             user_id=result["user_id"],
             expires_at=result["expires_at"].isoformat() if hasattr(result["expires_at"], 'isoformat') else str(result["expires_at"])
         )
-        
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"❌ Key generation error: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Key generation failed: {str(e)}")
 
 @app.get("/keys")
-async def list_api_keys(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """List all API keys for the user"""
+async def list_api_keys(auth: dict = Depends(require_api_key_or_oauth)):
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -541,12 +421,7 @@ async def list_api_keys(
         if not user_id:
             raise HTTPException(status_code=400, detail="User ID not found")
         
-        logger.info(f"🔑 Listing API keys for user: {user_id}")
-        
-        # Find all keys for this user
         keys = list(db.api_keys.find({"user_id": user_id}))
-        
-        logger.info(f"📊 Found {len(keys)} keys")
         
         return [{
             "key_prefix": k.get("key_prefix"),
@@ -557,21 +432,12 @@ async def list_api_keys(
             "last_used": k.get("last_used"),
             "usage_count": k.get("usage_count", 0)
         } for k in keys]
-        
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"❌ List keys error: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to list keys: {str(e)}")
 
 @app.delete("/keys/{key_prefix}")
-async def revoke_api_key(
-    key_prefix: str,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Revoke an API key"""
+async def revoke_api_key(key_prefix: str, auth: dict = Depends(require_api_key_or_oauth)):
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -580,44 +446,29 @@ async def revoke_api_key(
         if not user_id:
             raise HTTPException(status_code=400, detail="User ID not found")
         
-        logger.info(f"🔑 Revoking API key: {key_prefix} for user: {user_id}")
-        
-        # Find the key
         key_doc = db.api_keys.find_one({
             "user_id": user_id,
             "key_prefix": key_prefix
         })
         
         if not key_doc:
-            logger.warning(f"⚠️ Key not found: {key_prefix}")
             raise HTTPException(404, "Key not found")
         
-        # Revoke it
         result = db.api_keys.update_one(
             {"_id": key_doc["_id"]},
             {"$set": {"status": "revoked"}}
         )
         
         if result.modified_count > 0:
-            logger.info(f"✅ Key revoked: {key_prefix}")
             return {"message": "API key revoked"}
         else:
-            logger.warning(f"⚠️ Key not modified: {key_prefix}")
             return {"message": "Key already revoked or not found"}
-        
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"❌ Revoke key error: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to revoke key: {str(e)}")
 
 @app.get("/keys/stats")
-async def get_usage_stats(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Get usage statistics for API key"""
+async def get_usage_stats(auth: dict = Depends(require_api_key_or_oauth)):
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -626,9 +477,6 @@ async def get_usage_stats(
         if not user_id:
             raise HTTPException(status_code=400, detail="User ID not found")
         
-        logger.info(f"📊 Getting stats for user: {user_id}")
-        
-        # Get stats from usage logs
         stats = list(db.usage_logs.aggregate([
             {"$match": {"user_id": user_id}},
             {"$group": {
@@ -647,16 +495,9 @@ async def get_usage_stats(
         ]))
         
         result = stats[0] if stats else {"total_requests": 0, "last_24h": 0}
-        logger.info(f"📊 Stats: {result}")
-        
         return result
-        
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"❌ Stats error: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
 
 # ============================================
@@ -664,26 +505,23 @@ async def get_usage_stats(
 # ============================================
 
 @app.post("/chat", response_model=ChatResponse)
-@limiter.limit("10 per minute")
+@limiter.limit("10 per 10 minutes")
 async def chat(
     request: Request,
     chat_request: ChatRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Chat with Vostud AI (requires authentication)"""
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
     user_id = auth.get("user_id") or auth.get("sub")
     tier = auth.get("tier", "free")
     
-    # Check token usage limits
     can_proceed, message = await token_tracker.check_limit(user_id, tier)
     if not can_proceed:
         raise HTTPException(status_code=429, detail=message)
     
     try:
-        # Estimate tokens (rough estimate: 4 chars per token)
         tokens_used = len(chat_request.message) // 4
         
         response = chat_engine.generate_response(
@@ -693,11 +531,9 @@ async def chat(
             model_override=chat_request.model
         )
         
-        # Calculate actual tokens used
         tokens_used += len(response) // 4
         model_used = chat_engine.current_api or "unknown"
         
-        # Track usage
         await token_tracker.track_usage(
             user_id=user_id,
             tokens_used=tokens_used,
@@ -706,7 +542,6 @@ async def chat(
             cost=tokens_used * 0.000002
         )
         
-        # Format response if requested
         if chat_request.format == "source_only":
             response = extract_sources_only(response)
         elif chat_request.format == "concise":
@@ -734,11 +569,7 @@ async def chat(
 
 @app.post("/chat/public")
 @limiter.limit("5 per minute")
-async def chat_public(
-    request: Request,
-    chat_request: ChatRequest
-):
-    """Public chat endpoint (no authentication, rate limited)"""
+async def chat_public(request: Request, chat_request: ChatRequest):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
@@ -749,29 +580,18 @@ async def chat_public(
             use_rag=chat_request.use_rag,
             model_override=chat_request.model
         )
-        
         return {"response": response}
     except Exception as e:
         logger.error(f"Public chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ============================================
-# CHAT SOURCES ENDPOINT
-# ============================================
-
 @app.post("/chat/sources")
 @limiter.limit("10 per hour")
-async def get_sources_only(
-    request: Request,
-    chat_request: ChatRequest,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Get only the sources from the response"""
+async def get_sources_only(request: Request, chat_request: ChatRequest, auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
     try:
-        # Get full response
         response = chat_engine.generate_response(
             user_message=chat_request.message,
             conversation_history=chat_request.history,
@@ -779,12 +599,10 @@ async def get_sources_only(
             model_override=chat_request.model
         )
         
-        # Extract sources
         import re
         sources = re.findall(r'\[Source:[^\]]*\]', response)
         
         if not sources:
-            # Try to find Sources section
             sources_section = re.search(r'Sources?:?\s*\n?([\s\S]*?)(?=\n\n|$)', response)
             if sources_section:
                 return {
@@ -792,14 +610,8 @@ async def get_sources_only(
                     "topic": chat_request.message[:50] + "..."
                 }
         
-        # Remove duplicates
         unique_sources = list(dict.fromkeys(sources))
-        
-        return {
-            "sources": unique_sources,
-            "topic": chat_request.message[:50] + "..."
-        }
-        
+        return {"sources": unique_sources, "topic": chat_request.message[:50] + "..."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -808,72 +620,45 @@ async def get_sources_only(
 # ============================================
 
 @app.post("/mode/research")
-async def enable_research_mode(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Enable research mode"""
+async def enable_research_mode(auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
-    
     result = chat_engine.enable_research_mode()
     return {"message": result, "mode": "research"}
 
 @app.post("/mode/organize")
-async def enable_organize_mode(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Enable organization mode"""
+async def enable_organize_mode(auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
-    
     result = chat_engine.set_organization_mode()
     return {"message": result, "mode": "organize"}
 
 @app.post("/mode/compare")
-async def enable_compare_mode(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Enable comparison mode"""
+async def enable_compare_mode(auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
-    
     result = chat_engine.set_comparison_mode()
     return {"message": result, "mode": "compare"}
 
 @app.post("/mode/summary")
-async def enable_summary_mode(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Enable summary mode"""
+async def enable_summary_mode(auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
-    
     result = chat_engine.set_summary_mode()
     return {"message": result, "mode": "summary"}
 
 @app.post("/mode/coding")
-async def enable_coding_mode(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Reset to coding mode"""
+async def enable_coding_mode(auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
-    
     result = chat_engine.reset_to_coding_mode()
     return {"message": result, "mode": "coding"}
 
 @app.get("/mode/current")
-async def get_current_mode(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Get current mode"""
+async def get_current_mode(auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
-    
-    return {
-        "mode": chat_engine.get_current_mode(),
-        "research_mode": chat_engine.research_mode
-    }
+    return {"mode": chat_engine.get_current_mode(), "research_mode": chat_engine.research_mode}
 
 # ============================================
 # UPLOAD ENDPOINTS
@@ -881,12 +666,7 @@ async def get_current_mode(
 
 @app.post("/upload")
 @limiter.limit("20 per hour")
-async def upload_document(
-    request: Request,
-    file: UploadFile = File(...),
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Upload a document to the RAG database"""
+async def upload_document(request: Request, file: UploadFile = File(...), auth: dict = Depends(require_api_key_or_oauth)):
     if not rag_engine:
         raise HTTPException(status_code=400, detail="RAG engine not available")
     
@@ -920,12 +700,7 @@ async def upload_document(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/add-text")
-async def add_text(
-    text: str,
-    metadata: Optional[Dict] = None,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Add raw text to the knowledge base"""
+async def add_text(text: str, metadata: Optional[Dict] = None, auth: dict = Depends(require_api_key_or_oauth)):
     if not rag_engine:
         raise HTTPException(status_code=400, detail="RAG engine not available")
     
@@ -948,12 +723,7 @@ async def add_text(
 
 @app.post("/quiz")
 @limiter.limit("10 per hour")
-async def generate_quiz(
-    request: Request,
-    quiz_request: QuizRequest,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Generate a quiz on a topic"""
+async def generate_quiz(request: Request, quiz_request: QuizRequest, auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
@@ -972,13 +742,9 @@ async def generate_quiz(
 # ============================================
 
 @app.get("/knowledge-stats")
-async def get_stats(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Get knowledge base statistics"""
+async def get_stats(auth: dict = Depends(require_api_key_or_oauth)):
     if not rag_engine:
         return {"total_documents": 0, "status": "not_available"}
-    
     try:
         count = rag_engine.count()
         return {"total_documents": count, "status": "available"}
@@ -991,13 +757,9 @@ async def get_stats(
 # ============================================
 
 @app.get("/models")
-async def get_models(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Get available models and current selection"""
+async def get_models(auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine or not chat_engine.model_switcher:
         raise HTTPException(status_code=503, detail="Model switcher not available")
-    
     return {
         "current_model": chat_engine.model_switcher.get_current_model(),
         "auto_mode": chat_engine.model_switcher.auto_mode,
@@ -1005,14 +767,9 @@ async def get_models(
     }
 
 @app.post("/models/switch")
-async def switch_model(
-    request: ModelSwitchRequest,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Switch to a specific model or auto mode"""
+async def switch_model(request: ModelSwitchRequest, auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine or not chat_engine.model_switcher:
         raise HTTPException(status_code=503, detail="Model switcher not available")
-    
     result = chat_engine.model_switcher.set_model(request.model)
     return {
         "current_model": chat_engine.model_switcher.get_current_model(),
@@ -1021,14 +778,9 @@ async def switch_model(
     }
 
 @app.post("/models/auto")
-async def set_auto_mode(
-    enabled: bool = True,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Enable or disable auto model selection"""
+async def set_auto_mode(enabled: bool = True, auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine or not chat_engine.model_switcher:
         raise HTTPException(status_code=503, detail="Model switcher not available")
-    
     result = chat_engine.model_switcher.set_auto_mode(enabled)
     return {
         "auto_mode": chat_engine.model_switcher.auto_mode,
@@ -1036,13 +788,9 @@ async def set_auto_mode(
     }
 
 @app.post("/models/next")
-async def switch_next(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Switch to the next available model"""
+async def switch_next(auth: dict = Depends(require_api_key_or_oauth)):
     if not chat_engine or not chat_engine.model_switcher:
         raise HTTPException(status_code=503, detail="Model switcher not available")
-    
     result = chat_engine.model_switcher.switch_to_next_model()
     return {
         "current_model": chat_engine.model_switcher.get_current_model(),
@@ -1054,18 +802,12 @@ async def switch_next(
 # ============================================
 
 @app.get("/analytics/stats")
-async def get_analytics_stats(
-    days: int = 30,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Get usage statistics for the user"""
+async def get_analytics_stats(days: int = 30, auth: dict = Depends(require_api_key_or_oauth)):
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
-    
     user_id = auth.get("user_id") or auth.get("sub")
     if not user_id:
         raise HTTPException(status_code=400, detail="User ID not found")
-    
     try:
         stats = db.get_usage_stats(user_id, days)
         return stats
@@ -1074,18 +816,12 @@ async def get_analytics_stats(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/analytics/details")
-async def get_analytics_details(
-    days: int = 30,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Get detailed usage logs"""
+async def get_analytics_details(days: int = 30, auth: dict = Depends(require_api_key_or_oauth)):
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
-    
     user_id = auth.get("user_id") or auth.get("sub")
     if not user_id:
         raise HTTPException(status_code=400, detail="User ID not found")
-    
     try:
         logs = db.get_detailed_usage(user_id, days)
         return {"logs": logs}
@@ -1098,38 +834,24 @@ async def get_analytics_details(
 # ============================================
 
 @app.get("/usage")
-async def get_usage(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Get token usage for the user"""
+async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
     user_id = auth.get("user_id") or auth.get("sub")
     if not user_id:
         raise HTTPException(status_code=400, detail="User ID not found")
-    
     tier = auth.get("tier", "free")
-    
     usage = await token_tracker.get_usage(user_id, "month")
     daily_usage = await token_tracker.get_usage(user_id, "day")
-    
     return {
         "tier": tier,
         "limits": TIER_LIMITS.get(tier, TIER_LIMITS["free"]),
-        "usage": {
-            "monthly": usage,
-            "daily": daily_usage
-        }
+        "usage": {"monthly": usage, "daily": daily_usage}
     }
 
 @app.get("/usage/check")
-async def check_usage(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Check if user has exceeded their limits"""
+async def check_usage(auth: dict = Depends(require_api_key_or_oauth)):
     user_id = auth.get("user_id") or auth.get("sub")
     tier = auth.get("tier", "free")
-    
     can_proceed, message = await token_tracker.check_limit(user_id, tier)
-    
     return {
         "can_proceed": can_proceed,
         "message": message,
@@ -1147,10 +869,8 @@ async def health_check():
 
 @app.get("/db-test")
 async def test_database():
-    """Test database connection"""
     if not db:
         return {"status": "error", "message": "Database not connected"}
-    
     try:
         db.db.command("ping")
         return {"status": "success", "message": "Database connected"}
@@ -1159,11 +879,9 @@ async def test_database():
 
 @app.get("/oauth-check")
 async def oauth_check():
-    """Check OAuth configuration"""
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
-    
     return {
         "client_id_configured": bool(client_id),
         "client_secret_configured": bool(client_secret),
@@ -1172,48 +890,22 @@ async def oauth_check():
         "client_id_preview": client_id[:20] + "..." if client_id else None
     }
 
-@app.get("/debug/session")
-async def debug_session(request: Request):
-    """Debug session state"""
-    session = request.session if request.session else {}
-    return {
-        "session_exists": bool(request.session),
-        "session_keys": list(session.keys()) if session else [],
-        "cookies": list(request.cookies.keys()),
-        "has_oauth_state": "oauth_state" in session if session else False,
-        "session_data": {k: str(v)[:50] for k, v in session.items()} if session else {}
-    }
-
 # ============================================
-# FALLBACK FOR 404 - Serve frontend
+# FALLBACK & ERROR HANDLERS
 # ============================================
 
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
-    """Handle 404 errors by serving the frontend if the path might be a frontend route"""
     path = request.url.path
-    
-    # If it's an API path, return JSON error
     if path.startswith("/api") or path.startswith("/auth") or path.startswith("/keys") or path.startswith("/models"):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
-    
-    # Try to serve the index.html for frontend routes
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
-    
-    return HTMLResponse(
-        content=f"<h1>404 - Page not found</h1><p>The requested path '{path}' does not exist.</p>",
-        status_code=404
-    )
-
-# ============================================
-# ERROR HANDLERS
-# ============================================
+    return HTMLResponse(content=f"<h1>404 - Page not found</h1>", status_code=404)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler to return JSON instead of HTML"""
     logger.error(f"❌ Global error: {exc}")
     import traceback
     traceback.print_exc()
@@ -1227,50 +919,33 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ============================================
 
 def extract_sources_only(response: str) -> str:
-    """Extract only the sources/citations from the response"""
     import re
-    
-    # Find all [Source: ...] patterns
     source_pattern = r'\[Source:[^\]]*\]'
     sources = re.findall(source_pattern, response)
-    
-    # Also look for "Sources:" section
     if not sources:
         sources_section = re.search(r'Sources?:?\s*\n?([\s\S]*?)(?=\n\n|$)', response)
         if sources_section:
             return f"Sources:\n{sources_section.group(1).strip()}"
-    
     if sources:
-        # Remove duplicates
         unique_sources = list(dict.fromkeys(sources))
         return "Sources:\n" + "\n".join([f"• {s}" for s in unique_sources])
-    
-    # If no sources found, return a message
     return "No specific sources cited in the response."
 
 def extract_concise_response(response: str) -> str:
-    """Extract just the key points from the response"""
     import re
-    
-    # Look for bullet points or numbered lists
     lines = response.split('\n')
     key_points = []
-    
     for line in lines:
         stripped = line.strip()
         if stripped.startswith('•') or stripped.startswith('-') or stripped.startswith('*'):
             key_points.append(stripped)
         elif re.match(r'^\d+\.', stripped):
             key_points.append(stripped)
-    
     if key_points:
         return "Key Points:\n" + "\n".join(key_points)
-    
-    # Try to find the first paragraph
     paragraphs = [p for p in response.split('\n\n') if p.strip() and len(p.strip()) > 50]
     if paragraphs:
         return "Summary:\n" + paragraphs[0]
-    
     return response[:500] + "..." if len(response) > 500 else response
 
 # ============================================
