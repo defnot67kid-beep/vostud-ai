@@ -277,6 +277,28 @@ class SmartAIEngine:
         return self.current_mode
     
     # ============================================
+    # VOSTUD MODEL MAPPING
+    # ============================================
+    
+    def _map_vostud_model(self, model_name: str) -> str:
+        """Map Vostud branded model to actual API/model"""
+        
+        vostud_mapping = {
+            # Pro tier - Best quality
+            'vostud-2.5-pro': 'groq/llama-3.3-70b-versatile',
+            'vostud-2.5-flash': 'groq/llama-3.1-8b-instant',
+            'vostud-2.0-pro': 'gemini/gemini-2.5-pro',
+            'vostud-2.0-flash': 'gemini/gemini-2.0-flash',
+            'vostud-1.5-pro': 'openrouter/qwen/qwen-2.5-7b-instruct',
+            'vostud-1.5-flash': 'openrouter/meta-llama/llama-3.2-3b-instruct',
+            'vostud-pro': 'openai/gpt-4',
+            'vostud-flash': 'openai/gpt-3.5-turbo',
+            'vostud-local': 'ollama/llama2:latest'
+        }
+        
+        return vostud_mapping.get(model_name, model_name)
+    
+    # ============================================
     # GENERATE RESPONSE
     # ============================================
     
@@ -291,6 +313,15 @@ class SmartAIEngine:
         moderation_check = self._check_moderation(user_message)
         if moderation_check:
             return moderation_check
+        
+        # Map Vostud branded model if provided
+        actual_model = None
+        if model_override:
+            actual_model = self._map_vostud_model(model_override)
+            if actual_model != model_override:
+                print(f"🔄 Mapping Vostud model '{model_override}' → '{actual_model}'")
+        else:
+            actual_model = model_override
         
         # Get context from RAG if available
         context = ""
@@ -324,12 +355,12 @@ If the context doesn't contain the answer, use your general knowledge.
         messages.append({"role": "user", "content": user_message})
         
         # Check for model override
-        if model_override and self.model_switcher:
+        if actual_model and self.model_switcher:
             try:
-                print(f"🎯 Using manually selected model: {model_override}")
-                response = self._call_specific_model(model_override, messages)
+                print(f"🎯 Using manually selected model: {actual_model}")
+                response = self._call_specific_model(actual_model, messages)
                 if response:
-                    self.current_api = model_override.split('/')[0]
+                    self.current_api = actual_model.split('/')[0]
                     return self._apply_moderation_response(response)
             except Exception as e:
                 print(f"❌ Manual model selection failed: {e}")
@@ -419,11 +450,9 @@ What would you like to ask about today?"""
         # Check if the response itself contains inappropriate content
         if response:
             # Remove any profanity that might have slipped through
-            # (This is a safety net - the system prompt should prevent this)
             inappropriate_terms = ['fuck', 'shit', 'damn', 'hell', 'ass', 'bitch', 'crap']
             for term in inappropriate_terms:
                 if term in response.lower():
-                    # Redact the term
                     response = response.replace(term, '****')
                     response = response.replace(term.capitalize(), '****')
                     response = response.replace(term.upper(), '****')
