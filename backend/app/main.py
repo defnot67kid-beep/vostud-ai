@@ -136,6 +136,7 @@ class ChatRequest(BaseModel):
     history: Optional[List[Dict]] = None
     use_rag: bool = True
     model: Optional[str] = None
+    format: Optional[str] = None  # 'source_only', 'concise', 'detailed'
 
 class ChatResponse(BaseModel):
     response: str
@@ -659,6 +660,12 @@ async def chat(
             model_override=request.model
         )
         
+        # Format response if requested
+        if request.format == "source_only":
+            response = extract_sources_only(response)
+        elif request.format == "concise":
+            response = extract_concise_response(response)
+        
         model_used = None
         if chat_engine.model_switcher:
             if request.model:
@@ -667,6 +674,24 @@ async def chat(
                 model_used = chat_engine.model_switcher.current_model
             elif chat_engine.model_switcher.auto_mode:
                 model_used = "auto"
+        
+        # Log usage with details
+        if db:
+            try:
+                user_id = auth.get("user_id") or auth.get("sub")
+                if user_id:
+                    db.usage_logs.insert_one({
+                        "user_id": user_id,
+                        "timestamp": datetime.utcnow(),
+                        "endpoint": "/chat",
+                        "model_used": model_used or "unknown",
+                        "api_used": chat_engine.current_api or "unknown",
+                        "response_size": len(response) if response else 0,
+                        "request_size": len(request.message) if request.message else 0,
+                        "format": request.format or "detailed"
+                    })
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to log usage: {e}")
         
         return ChatResponse(
             response=response,
@@ -697,6 +722,52 @@ async def chat_public(
         return {"response": response}
     except Exception as e:
         logger.error(f"Public chat error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================
+# CHAT SOURCES ENDPOINT
+# ============================================
+
+@app.post("/chat/sources")
+async def get_sources_only(
+    request: ChatRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get only the sources from the response"""
+    if not chat_engine:
+        raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    try:
+        # Get full response
+        response = chat_engine.generate_response(
+            user_message=request.message,
+            conversation_history=request.history,
+            use_rag=request.use_rag,
+            model_override=request.model
+        )
+        
+        # Extract sources
+        import re
+        sources = re.findall(r'\[Source:[^\]]*\]', response)
+        
+        if not sources:
+            # Try to find Sources section
+            sources_section = re.search(r'Sources?:?\s*\n?([\s\S]*?)(?=\n\n|$)', response)
+            if sources_section:
+                return {
+                    "sources": [s.strip() for s in sources_section.group(1).split('\n') if s.strip()],
+                    "topic": request.message[:50] + "..."
+                }
+        
+        # Remove duplicates
+        unique_sources = list(dict.fromkeys(sources))
+        
+        return {
+            "sources": unique_sources,
+            "topic": request.message[:50] + "..."
+        }
+        
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================
@@ -942,6 +1013,50 @@ async def switch_next(
     }
 
 # ============================================
+# ANALYTICS ENDPOINTS
+# ============================================
+
+@app.get("/analytics/stats")
+async def get_analytics_stats(
+    days: int = 30,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get usage statistics for the user"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    try:
+        stats = db.get_usage_stats(user_id, days)
+        return stats
+    except Exception as e:
+        logger.error(f"❌ Analytics stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/analytics/details")
+async def get_analytics_details(
+    days: int = 30,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get detailed usage logs"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    try:
+        logs = db.get_detailed_usage(user_id, days)
+        return {"logs": logs}
+    except Exception as e:
+        logger.error(f"❌ Analytics details error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================
 # HEALTH & TEST ENDPOINTS
 # ============================================
 
@@ -1025,6 +1140,57 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": f"Internal Server Error: {str(exc)}"}
     )
+
+# ============================================
+# HELPER FUNCTIONS
+# ============================================
+
+def extract_sources_only(response: str) -> str:
+    """Extract only the sources/citations from the response"""
+    import re
+    
+    # Find all [Source: ...] patterns
+    source_pattern = r'\[Source:[^\]]*\]'
+    sources = re.findall(source_pattern, response)
+    
+    # Also look for "Sources:" section
+    if not sources:
+        sources_section = re.search(r'Sources?:?\s*\n?([\s\S]*?)(?=\n\n|$)', response)
+        if sources_section:
+            return f"Sources:\n{sources_section.group(1).strip()}"
+    
+    if sources:
+        # Remove duplicates
+        unique_sources = list(dict.fromkeys(sources))
+        return "Sources:\n" + "\n".join([f"• {s}" for s in unique_sources])
+    
+    # If no sources found, return a message
+    return "No specific sources cited in the response."
+
+def extract_concise_response(response: str) -> str:
+    """Extract just the key points from the response"""
+    import re
+    
+    # Look for bullet points or numbered lists
+    lines = response.split('\n')
+    key_points = []
+    
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('•') or stripped.startswith('-') or stripped.startswith('*'):
+            key_points.append(stripped)
+        elif re.match(r'^\d+\.', stripped):
+            key_points.append(stripped)
+    
+    if key_points:
+        return "Key Points:\n" + "\n".join(key_points)
+    
+    # Try to find the first paragraph
+    paragraphs = [p for p in response.split('\n\n') if p.strip() and len(p.strip()) > 50]
+    if paragraphs:
+        return "Summary:\n" + paragraphs[0]
+    
+    return response[:500] + "..." if len(response) > 500 else response
 
 # ============================================
 # RUN APP
