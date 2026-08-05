@@ -151,21 +151,16 @@ app.add_middleware(RateLimitMiddleware, db=db, token_tracker=token_tracker)
 # ============================================
 
 PROFANITY_LIST = [
-    # Racial slurs
     "nigger", "nigga", "chink", "gook", "spic", "wetback", "kike",
     "faggot", "dyke", "tranny", "retard",
-    # Profanity
     "fuck", "shit", "cunt", "pussy", "dick", "asshole", "bastard", 
     "bitch", "whore", "slut", "cocksucker", "motherfucker",
-    # Hate speech
     "hate", "racist", "sexist", "homophobic", "transphobic",
-    # Threats
     "kill", "murder", "rape", "abuse", "torture", "bomb", "explosive",
     "weapon", "gun", "knife", "attack", "hurt", "destroy"
 ]
 
 def contains_profanity(text: str) -> bool:
-    """Check if text contains profanity"""
     if not text:
         return False
     text_lower = text.lower()
@@ -173,7 +168,6 @@ def contains_profanity(text: str) -> bool:
     return bool(re.search(pattern, text_lower))
 
 def contains_profanity_loose(text: str) -> bool:
-    """Check if text contains profanity (loose matching)"""
     if not text:
         return False
     text_lower = text.lower()
@@ -187,7 +181,6 @@ def contains_profanity_loose(text: str) -> bool:
 # ============================================
 
 VALID_MODELS = [
-    # Vostud Branded Models
     "auto",
     "vostud-2.5-pro",
     "vostud-2.5-flash",
@@ -198,7 +191,6 @@ VALID_MODELS = [
     "vostud-pro",
     "vostud-flash",
     "vostud-local",
-    # Raw API Models
     "groq/llama-3.3-70b-versatile",
     "groq/llama-3.1-70b-versatile",
     "groq/llama-3.1-8b-instant",
@@ -216,44 +208,29 @@ VALID_MODELS = [
     "ollama/llama2:latest"
 ]
 
-# ============================================
-# MODEL VALIDATION FUNCTION
-# ============================================
-
 def validate_model(model: str) -> tuple:
-    """
-    Validate the model parameter.
-    Returns (is_valid, error_message, actual_model)
-    """
     if not model:
         return False, "⚠️ Model selection required. Please specify a model or use 'auto' for automatic selection.", None
     
-    # Check for profanity in model name
     if contains_profanity_loose(model):
         return False, "❌ Invalid model name. Please use a valid model from the list below.", None
     
     if model == "auto":
         return True, None, "auto"
     
-    # Check if it's a valid model
     if model in VALID_MODELS:
         return True, None, model
     
-    # Check if it's a Vostud model (without the "vostud-" prefix check)
     if model.startswith("vostud-"):
-        # Map to full model name if valid
         full_model = f"vostud-{model.replace('vostud-', '')}"
         if full_model in VALID_MODELS:
             return True, None, full_model
     
-    # Check if it's a raw API model
     if "/" in model:
-        # Check if any valid model ends with this
         for valid in VALID_MODELS:
             if valid.endswith(model) or model in valid:
                 return True, None, valid
     
-    # Invalid model - return professional error
     return False, f"""❌ Invalid Model Selection
 
 The model '{model}' is not available in Vostud AI.
@@ -298,7 +275,6 @@ Please specify a valid model in your request.""", None
 
 @app.get("/logo")
 async def get_logo():
-    """Get the Vostud AI logo"""
     logo_path = os.path.join(STATIC_DIR, "images", "vostud-logo.png")
     if os.path.exists(logo_path):
         return FileResponse(logo_path, media_type="image/png")
@@ -368,10 +344,7 @@ async def serve_platform():
     platform_path = os.path.join(FRONTEND_DIR, "platform.html")
     if os.path.exists(platform_path):
         return FileResponse(platform_path)
-    return HTMLResponse(
-        content="<h1>Platform page not found</h1>",
-        status_code=404
-    )
+    return HTMLResponse(content="<h1>Platform page not found</h1>", status_code=404)
 
 @app.get("/index.html")
 async def serve_index():
@@ -642,33 +615,34 @@ async def revoke_api_key(key_prefix: str, auth: dict = Depends(require_api_key_o
 
 @app.get("/keys/stats")
 async def get_usage_stats(auth: dict = Depends(require_api_key_or_oauth)):
+    """Get usage statistics for the user"""
     try:
         if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
+            return {"total_requests": 0, "last_24h": 0}
         
         user_id = auth.get("user_id") or auth.get("sub")
         if not user_id:
             raise HTTPException(status_code=400, detail="User ID not found")
         
-        stats = list(db.usage_logs.aggregate([
-            {"$match": {"user_id": user_id}},
-            {"$group": {
-                "_id": None,
-                "total_requests": {"$sum": 1},
-                "last_24h": {
-                    "$sum": {
-                        "$cond": [
-                            {"$gte": ["$timestamp", datetime.utcnow() - timedelta(hours=24)]},
-                            1,
-                            0
-                        ]
-                    }
-                }
-            }}
-        ]))
+        # Get key stats
+        key_stats = db.get_key_stats(user_id)
         
-        result = stats[0] if stats else {"total_requests": 0, "last_24h": 0}
-        return result
+        # Get usage from last 24 hours
+        cutoff_date = datetime.utcnow() - timedelta(hours=24)
+        last_24h = db.usage_logs.count_documents({
+            "user_id": user_id,
+            "timestamp": {"$gte": cutoff_date}
+        })
+        
+        # Get total usage
+        total_usage = db.usage_logs.count_documents({"user_id": user_id})
+        
+        return {
+            "total_keys": key_stats.get("total_keys", 0),
+            "active_keys": key_stats.get("active_keys", 0),
+            "total_requests": total_usage,
+            "last_24h": last_24h
+        }
     except Exception as e:
         logger.error(f"❌ Stats error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
@@ -687,14 +661,12 @@ async def chat(
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
-    # Check for profanity
     if contains_profanity(chat_request.message):
         raise HTTPException(
             status_code=400, 
             detail="❌ Your message contains inappropriate language. Please keep the conversation professional."
         )
     
-    # Validate model
     model_to_use = chat_request.model
     
     if not model_to_use:
@@ -715,6 +687,8 @@ async def chat(
         raise HTTPException(status_code=429, detail=message)
     
     try:
+        api_key = request.headers.get("X-API-Key")
+        
         tokens_used = len(chat_request.message) // 4
         
         response = chat_engine.generate_response(
@@ -727,13 +701,26 @@ async def chat(
         tokens_used += len(response) // 4
         model_used = chat_engine.current_api or "unknown"
         
-        await token_tracker.track_usage(
-            user_id=user_id,
-            tokens_used=tokens_used,
-            model=model_used,
-            api=chat_engine.current_api or "unknown",
-            cost=tokens_used * 0.000002
-        )
+        if db:
+            db.log_usage(
+                user_id=user_id,
+                api_key=api_key,
+                endpoint="/chat",
+                model_used=model_used,
+                api_used=chat_engine.current_api or "unknown",
+                tokens_used=tokens_used,
+                request_size=len(chat_request.message),
+                response_size=len(response),
+                cost=tokens_used * 0.000002
+            )
+            
+            await token_tracker.track_usage(
+                user_id=user_id,
+                tokens_used=tokens_used,
+                model=model_used,
+                api=chat_engine.current_api or "unknown",
+                cost=tokens_used * 0.000002
+            )
         
         if chat_request.format == "source_only":
             response = extract_sources_only(response)
@@ -937,7 +924,6 @@ async def add_text(
     if not rag_engine:
         raise HTTPException(status_code=400, detail="RAG engine not available")
     
-    # Check for profanity
     if contains_profanity(text):
         raise HTTPException(
             status_code=400, 
@@ -971,7 +957,6 @@ async def generate_quiz(
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
-    # Check for profanity in topic
     if contains_profanity(quiz_request.topic):
         raise HTTPException(
             status_code=400, 
