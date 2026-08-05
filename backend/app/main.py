@@ -13,6 +13,7 @@ import uuid
 import mimetypes
 import logging
 import json
+import hashlib
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -86,6 +87,14 @@ from app.oauth import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from authlib.integrations.starlette_client import OAuthError
+from app.rate_limiter import limiter, token_tracker, RateLimitMiddleware, TIER_LIMITS
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+
+# ============================================
+# SETUP RATE LIMITER
+# ============================================
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ============================================
 # SETUP OAUTH
@@ -128,6 +137,11 @@ except Exception as e:
     logger.error(f"❌ Chat Engine failed: {e}")
 
 # ============================================
+# ADD RATE LIMIT MIDDLEWARE
+# ============================================
+app.add_middleware(RateLimitMiddleware, db=db, token_tracker=token_tracker)
+
+# ============================================
 # PYDANTIC MODELS
 # ============================================
 
@@ -143,6 +157,7 @@ class ChatResponse(BaseModel):
     api_used: Optional[str] = None
     model_used: Optional[str] = None
     mode: Optional[str] = None
+    tokens_used: Optional[int] = None
 
 class QuizRequest(BaseModel):
     topic: str
@@ -318,7 +333,7 @@ async def auth_google_callback(request: Request):
                 existing_user = db.users.find_one({"email": email})
                 
                 if not existing_user:
-                    # Create new user
+                    # Create new user with tier
                     user_doc = {
                         "email": email,
                         "username": name,
@@ -328,7 +343,8 @@ async def auth_google_callback(request: Request):
                         "family_name": family_name,
                         "created_at": datetime.utcnow(),
                         "auth_provider": "google",
-                        "last_login": datetime.utcnow()
+                        "last_login": datetime.utcnow(),
+                        "tier": "free"  # Default tier
                     }
                     result = db.users.insert_one(user_doc)
                     user_id = str(result.inserted_id)
@@ -356,12 +372,13 @@ async def auth_google_callback(request: Request):
             user_id = f"user_{uuid.uuid4().hex[:8]}"
             logger.warning(f"⚠️ Database not available, using fallback user_id: {user_id}")
         
-        # Create JWT token
+        # Create JWT token with tier
         access_token = create_access_token({
             "sub": user_id,
             "email": email,
             "name": name,
-            "picture": picture or ""
+            "picture": picture or "",
+            "tier": "free"
         })
         
         logger.info(f"✅ JWT token created for: {email}")
@@ -421,8 +438,10 @@ async def auth_logout():
 # ============================================
 
 @app.post("/keys/generate", response_model=CreateKeyResponse)
+@limiter.limit("5 per hour")
 async def generate_api_key(
-    request: CreateKeyRequest,
+    request: Request,
+    create_request: CreateKeyRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
     """Generate a new API key - auto-creates user if not found"""
@@ -441,8 +460,8 @@ async def generate_api_key(
             raise HTTPException(status_code=400, detail="User ID not found")
         
         logger.info(f"🔑 Generating API key for user: {user_id}")
-        logger.info(f"📝 Key name: {request.name}")
-        logger.info(f"📅 Expires in: {request.expires_in_days} days")
+        logger.info(f"📝 Key name: {create_request.name}")
+        logger.info(f"📅 Expires in: {create_request.expires_in_days} days")
         
         # Try to find the user by ID first
         user = None
@@ -471,7 +490,8 @@ async def generate_api_key(
                 "display_name": name,
                 "created_at": datetime.utcnow(),
                 "auth_provider": "oauth",
-                "last_login": datetime.utcnow()
+                "last_login": datetime.utcnow(),
+                "tier": "free"
             }
             
             # Insert the user
@@ -483,8 +503,8 @@ async def generate_api_key(
         # Now generate the API key for the (now confirmed) user
         result = db.create_api_key(
             user_id=user_id,
-            name=request.name or f"Key for {user.get('email', user_id)}",
-            expires_in_days=request.expires_in_days
+            name=create_request.name or f"Key for {user.get('email', user_id)}",
+            expires_in_days=create_request.expires_in_days
         )
         
         if not result:
@@ -644,68 +664,79 @@ async def get_usage_stats(
 # ============================================
 
 @app.post("/chat", response_model=ChatResponse)
+@limiter.limit("10 per minute")
 async def chat(
-    request: ChatRequest,
+    request: Request,
+    chat_request: ChatRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
     """Chat with Vostud AI (requires authentication)"""
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
+    user_id = auth.get("user_id") or auth.get("sub")
+    tier = auth.get("tier", "free")
+    
+    # Check token usage limits
+    can_proceed, message = await token_tracker.check_limit(user_id, tier)
+    if not can_proceed:
+        raise HTTPException(status_code=429, detail=message)
+    
     try:
+        # Estimate tokens (rough estimate: 4 chars per token)
+        tokens_used = len(chat_request.message) // 4
+        
         response = chat_engine.generate_response(
-            user_message=request.message,
-            conversation_history=request.history,
-            use_rag=request.use_rag,
-            model_override=request.model
+            user_message=chat_request.message,
+            conversation_history=chat_request.history,
+            use_rag=chat_request.use_rag,
+            model_override=chat_request.model
+        )
+        
+        # Calculate actual tokens used
+        tokens_used += len(response) // 4
+        model_used = chat_engine.current_api or "unknown"
+        
+        # Track usage
+        await token_tracker.track_usage(
+            user_id=user_id,
+            tokens_used=tokens_used,
+            model=model_used,
+            api=chat_engine.current_api or "unknown",
+            cost=tokens_used * 0.000002
         )
         
         # Format response if requested
-        if request.format == "source_only":
+        if chat_request.format == "source_only":
             response = extract_sources_only(response)
-        elif request.format == "concise":
+        elif chat_request.format == "concise":
             response = extract_concise_response(response)
         
-        model_used = None
+        model_used_display = None
         if chat_engine.model_switcher:
-            if request.model:
-                model_used = request.model
+            if chat_request.model:
+                model_used_display = chat_request.model
             elif chat_engine.model_switcher.current_model:
-                model_used = chat_engine.model_switcher.current_model
+                model_used_display = chat_engine.model_switcher.current_model
             elif chat_engine.model_switcher.auto_mode:
-                model_used = "auto"
-        
-        # Log usage with details
-        if db:
-            try:
-                user_id = auth.get("user_id") or auth.get("sub")
-                if user_id:
-                    db.usage_logs.insert_one({
-                        "user_id": user_id,
-                        "timestamp": datetime.utcnow(),
-                        "endpoint": "/chat",
-                        "model_used": model_used or "unknown",
-                        "api_used": chat_engine.current_api or "unknown",
-                        "response_size": len(response) if response else 0,
-                        "request_size": len(request.message) if request.message else 0,
-                        "format": request.format or "detailed"
-                    })
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to log usage: {e}")
+                model_used_display = "auto"
         
         return ChatResponse(
             response=response,
             api_used=chat_engine.current_api,
-            model_used=model_used,
-            mode=chat_engine.get_current_mode() if chat_engine else "coding"
+            model_used=model_used_display,
+            mode=chat_engine.get_current_mode() if chat_engine else "coding",
+            tokens_used=tokens_used
         )
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/public")
+@limiter.limit("5 per minute")
 async def chat_public(
-    request: ChatRequest
+    request: Request,
+    chat_request: ChatRequest
 ):
     """Public chat endpoint (no authentication, rate limited)"""
     if not chat_engine:
@@ -713,10 +744,10 @@ async def chat_public(
     
     try:
         response = chat_engine.generate_response(
-            user_message=request.message,
-            conversation_history=request.history,
-            use_rag=request.use_rag,
-            model_override=request.model
+            user_message=chat_request.message,
+            conversation_history=chat_request.history,
+            use_rag=chat_request.use_rag,
+            model_override=chat_request.model
         )
         
         return {"response": response}
@@ -729,8 +760,10 @@ async def chat_public(
 # ============================================
 
 @app.post("/chat/sources")
+@limiter.limit("10 per hour")
 async def get_sources_only(
-    request: ChatRequest,
+    request: Request,
+    chat_request: ChatRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
     """Get only the sources from the response"""
@@ -740,10 +773,10 @@ async def get_sources_only(
     try:
         # Get full response
         response = chat_engine.generate_response(
-            user_message=request.message,
-            conversation_history=request.history,
-            use_rag=request.use_rag,
-            model_override=request.model
+            user_message=chat_request.message,
+            conversation_history=chat_request.history,
+            use_rag=chat_request.use_rag,
+            model_override=chat_request.model
         )
         
         # Extract sources
@@ -756,7 +789,7 @@ async def get_sources_only(
             if sources_section:
                 return {
                     "sources": [s.strip() for s in sources_section.group(1).split('\n') if s.strip()],
-                    "topic": request.message[:50] + "..."
+                    "topic": chat_request.message[:50] + "..."
                 }
         
         # Remove duplicates
@@ -764,7 +797,7 @@ async def get_sources_only(
         
         return {
             "sources": unique_sources,
-            "topic": request.message[:50] + "..."
+            "topic": chat_request.message[:50] + "..."
         }
         
     except Exception as e:
@@ -847,7 +880,9 @@ async def get_current_mode(
 # ============================================
 
 @app.post("/upload")
+@limiter.limit("20 per hour")
 async def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     auth: dict = Depends(require_api_key_or_oauth)
 ):
@@ -912,8 +947,10 @@ async def add_text(
 # ============================================
 
 @app.post("/quiz")
+@limiter.limit("10 per hour")
 async def generate_quiz(
-    request: QuizRequest,
+    request: Request,
+    quiz_request: QuizRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
     """Generate a quiz on a topic"""
@@ -922,8 +959,8 @@ async def generate_quiz(
     
     try:
         quiz = chat_engine.generate_quiz(
-            topic=request.topic,
-            num_questions=request.num_questions
+            topic=quiz_request.topic,
+            num_questions=quiz_request.num_questions
         )
         return {"quiz": quiz}
     except Exception as e:
@@ -1055,6 +1092,50 @@ async def get_analytics_details(
     except Exception as e:
         logger.error(f"❌ Analytics details error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================
+# USAGE ENDPOINTS
+# ============================================
+
+@app.get("/usage")
+async def get_usage(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get token usage for the user"""
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    tier = auth.get("tier", "free")
+    
+    usage = await token_tracker.get_usage(user_id, "month")
+    daily_usage = await token_tracker.get_usage(user_id, "day")
+    
+    return {
+        "tier": tier,
+        "limits": TIER_LIMITS.get(tier, TIER_LIMITS["free"]),
+        "usage": {
+            "monthly": usage,
+            "daily": daily_usage
+        }
+    }
+
+@app.get("/usage/check")
+async def check_usage(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Check if user has exceeded their limits"""
+    user_id = auth.get("user_id") or auth.get("sub")
+    tier = auth.get("tier", "free")
+    
+    can_proceed, message = await token_tracker.check_limit(user_id, tier)
+    
+    return {
+        "can_proceed": can_proceed,
+        "message": message,
+        "tier": tier,
+        "limits": TIER_LIMITS.get(tier, TIER_LIMITS["free"])
+    }
 
 # ============================================
 # HEALTH & TEST ENDPOINTS
