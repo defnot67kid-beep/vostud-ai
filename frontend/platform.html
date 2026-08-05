@@ -103,10 +103,27 @@
             background: rgba(74, 222, 128, 0.3);
         }
 
-        /* Login/Register */
+        .btn-google {
+            background: #4285F4;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 12px 24px;
+            font-size: 1.1em;
+            width: 100%;
+        }
+
+        .btn-google:hover {
+            background: #357ae8;
+            box-shadow: 0 5px 25px rgba(66, 133, 244, 0.4);
+        }
+
+        /* Auth Container */
         .auth-container {
-            max-width: 400px;
-            margin: 100px auto;
+            max-width: 420px;
+            margin: 60px auto;
             background: rgba(255, 255, 255, 0.05);
             padding: 40px;
             border-radius: 20px;
@@ -116,8 +133,38 @@
 
         .auth-container h2 {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 10px;
             font-size: 1.8em;
+        }
+
+        .auth-container .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 25px;
+            font-size: 0.95em;
+        }
+
+        .auth-container .divider {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+            color: #666;
+            font-size: 0.85em;
+        }
+
+        .auth-container .divider::before,
+        .auth-container .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .auth-container .divider::before {
+            margin-right: 15px;
+        }
+
+        .auth-container .divider::after {
+            margin-left: 15px;
         }
 
         .auth-container input {
@@ -165,6 +212,15 @@
             background: rgba(248, 113, 113, 0.1);
             border-radius: 8px;
             display: none;
+        }
+
+        .auth-container .user-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            display: block;
+            border: 2px solid rgba(255, 255, 255, 0.1);
         }
 
         /* Dashboard */
@@ -437,7 +493,7 @@
             display: block;
         }
 
-        /* Toast / Notification */
+        /* Toast */
         .toast {
             position: fixed;
             bottom: 30px;
@@ -475,79 +531,6 @@
                 opacity: 1;
                 transform: translateY(0);
             }
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            .header-actions {
-                width: 100%;
-            }
-            .header-actions .btn {
-                flex: 1;
-                text-align: center;
-            }
-            .stats-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-            .keys-table {
-                font-size: 0.8em;
-            }
-            .keys-table th,
-            .keys-table td {
-                padding: 8px 10px;
-            }
-            .auth-container {
-                margin: 50px 20px;
-                padding: 30px 20px;
-            }
-            .api-key-display {
-                flex-direction: column;
-                align-items: stretch;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-            .tabs {
-                flex-direction: column;
-            }
-            .tab {
-                text-align: center;
-            }
-        }
-
-        /* Loading spinner */
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-            border-top-color: #667eea;
-            animation: spin 1s ease-in-out infinite;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        .loading-text {
-            display: none;
-            align-items: center;
-            gap: 10px;
-            color: #888;
-        }
-
-        .loading-text.active {
-            display: flex;
         }
 
         /* Modal */
@@ -608,6 +591,68 @@
         .modal .modal-close:hover {
             color: #fff;
         }
+
+        /* Loading */
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .header-actions {
+                width: 100%;
+            }
+            .header-actions .btn {
+                flex: 1;
+                text-align: center;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .keys-table {
+                font-size: 0.8em;
+            }
+            .keys-table th,
+            .keys-table td {
+                padding: 8px 10px;
+            }
+            .auth-container {
+                margin: 30px 15px;
+                padding: 30px 20px;
+            }
+            .api-key-display {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .tabs {
+                flex-direction: column;
+            }
+            .tab {
+                text-align: center;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -645,24 +690,41 @@
         <div class="header">
             <h1>⚡ Vostud AI Platform</h1>
             <div class="header-actions">
-                <span id="userDisplay" style="color: #aaa; display: none;">👤 <span id="usernameDisplay"></span></span>
+                <span id="userDisplay" style="display: none; color: #aaa; display: flex; align-items: center; gap: 10px;">
+                    <img id="userAvatar" src="" alt="Avatar" style="width: 32px; height: 32px; border-radius: 50%;">
+                    <span id="usernameDisplay"></span>
+                </span>
                 <button class="btn btn-secondary" id="logoutBtn" style="display: none;" onclick="logout()">Logout</button>
             </div>
         </div>
 
         <!-- ===== AUTH CONTAINER ===== -->
         <div class="auth-container" id="authContainer">
-            <h2 id="authTitle">🔑 Login</h2>
-            <div class="error-msg" id="authError"></div>
-            <form id="authForm">
-                <input type="email" id="authEmail" placeholder="Email" required>
-                <input type="text" id="authUsername" placeholder="Username" style="display: none;">
-                <input type="password" id="authPassword" placeholder="Password" required>
-                <button type="submit" class="btn btn-primary" id="authSubmitBtn">Login</button>
+            <h2>🔑 Welcome to Vostud AI</h2>
+            <p class="subtitle">Sign in to manage your API keys and use the platform</p>
+
+            <button class="btn btn-google" onclick="loginWithGoogle()">
+                <svg width="20" height="20" viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                </svg>
+                Sign in with Google
+            </button>
+
+            <div class="divider">or use API key</div>
+
+            <form id="authForm" style="display: none;">
+                <input type="text" id="authApiKey" placeholder="Enter your API key (vsd-...)" style="margin-bottom: 10px;">
+                <button type="submit" class="btn btn-secondary">Login with API Key</button>
             </form>
-            <div class="switch-link" id="authSwitch" onclick="toggleAuthMode()">
-                Don't have an account? <strong>Register</strong>
-            </div>
+
+            <div class="error-msg" id="authError"></div>
+
+            <p style="text-align: center; color: #666; font-size: 0.8em; margin-top: 20px;">
+                🔑 API keys can be generated after signing in
+            </p>
         </div>
 
         <!-- ===== DASHBOARD ===== -->
@@ -835,110 +897,117 @@
         // ============================================
         // AUTHENTICATION
         // ============================================
-        function toggleAuthMode() {
-            isLoginMode = !isLoginMode;
-            const title = document.getElementById('authTitle');
-            const switchLink = document.getElementById('authSwitch');
-            const usernameField = document.getElementById('authUsername');
-            const submitBtn = document.getElementById('authSubmitBtn');
 
-            if (isLoginMode) {
-                title.textContent = '🔑 Login';
-                usernameField.style.display = 'none';
-                submitBtn.textContent = 'Login';
-                switchLink.innerHTML = `Don't have an account? <strong>Register</strong>`;
-            } else {
-                title.textContent = '📝 Register';
-                usernameField.style.display = 'block';
-                submitBtn.textContent = 'Register';
-                switchLink.innerHTML = `Already have an account? <strong>Login</strong>`;
-            }
-            document.getElementById('authError').style.display = 'none';
+        function loginWithGoogle() {
+            window.location.href = `${API_URL}/auth/google`;
         }
 
-        document.getElementById('authForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const email = document.getElementById('authEmail').value;
-            const password = document.getElementById('authPassword').value;
-            const username = document.getElementById('authUsername').value;
-            const errorEl = document.getElementById('authError');
-            const submitBtn = document.getElementById('authSubmitBtn');
-
-            errorEl.style.display = 'none';
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Loading...';
-
+        // Check OAuth session via cookie
+        async function checkOAuthSession() {
             try {
-                let endpoint, body;
-                if (isLoginMode) {
-                    // Login - for now we'll register then use the key
-                    // In production, you'd have a proper login endpoint
-                    showToast('Please register first, then use your API key to log in.', 'error');
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Login';
-                    return;
-                } else {
-                    // Register
-                    endpoint = `${API_URL}/auth/register`;
-                    body = { email, username, password };
-                }
-
-                const response = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
+                const response = await fetch(`${API_URL}/auth/me`, {
+                    credentials: 'include'
                 });
 
-                const data = await response.json();
-
                 if (response.ok) {
-                    showToast('Registration successful! Please login.', 'success');
-                    toggleAuthMode();
-                    // Pre-fill email
-                    document.getElementById('authEmail').value = email;
-                } else {
-                    errorEl.textContent = data.detail || 'Registration failed';
-                    errorEl.style.display = 'block';
+                    const data = await response.json();
+                    if (data.authenticated) {
+                        currentUser = data.user;
+                        document.getElementById('usernameDisplay').textContent = currentUser.name || currentUser.email;
+                        if (currentUser.picture) {
+                            document.getElementById('userAvatar').src = currentUser.picture;
+                            document.getElementById('userAvatar').style.display = 'inline-block';
+                        }
+                        document.getElementById('userDisplay').style.display = 'flex';
+                        showDashboard();
+                        loadDashboardData();
+                        return true;
+                    }
                 }
             } catch (error) {
-                errorEl.textContent = error.message || 'Network error';
+                console.log('No OAuth session');
+            }
+            return false;
+        }
+
+        // API Key login
+        document.getElementById('authForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const apiKey = document.getElementById('authApiKey').value.trim();
+            const errorEl = document.getElementById('authError');
+
+            if (!apiKey || !apiKey.startsWith('vsd-')) {
+                errorEl.textContent = 'Please enter a valid API key starting with "vsd-"';
                 errorEl.style.display = 'block';
+                return;
             }
 
-            submitBtn.disabled = false;
-            submitBtn.textContent = isLoginMode ? 'Login' : 'Register';
+            // Test the key
+            fetch(`${API_URL}/keys`, {
+                headers: { 'X-API-Key': apiKey }
+            }).then(response => {
+                if (response.ok) {
+                    localStorage.setItem('vostud_api_key', apiKey);
+                    authToken = apiKey;
+                    showToast('✅ Logged in successfully!');
+                    checkAuth();
+                } else {
+                    errorEl.textContent = 'Invalid API key. Please check and try again.';
+                    errorEl.style.display = 'block';
+                }
+            }).catch(() => {
+                errorEl.textContent = 'Network error. Please try again.';
+                errorEl.style.display = 'block';
+            });
         });
 
-        // Check if already logged in
+        function logout() {
+            localStorage.removeItem('vostud_api_key');
+            authToken = null;
+            currentUser = null;
+
+            // Also logout from OAuth
+            fetch(`${API_URL}/auth/logout`, {
+                method: 'POST',
+                credentials: 'include'
+            }).finally(() => {
+                document.getElementById('authContainer').style.display = 'block';
+                document.getElementById('dashboard').style.display = 'none';
+                document.getElementById('logoutBtn').style.display = 'none';
+                document.getElementById('userDisplay').style.display = 'none';
+                showToast('Logged out successfully');
+            });
+        }
+
         function checkAuth() {
             const key = localStorage.getItem('vostud_api_key');
             if (key) {
                 authToken = key;
                 showDashboard();
                 loadDashboardData();
-            } else {
-                document.getElementById('authContainer').style.display = 'block';
-                document.getElementById('dashboard').style.display = 'none';
+                return;
             }
-        }
 
-        function logout() {
-            localStorage.removeItem('vostud_api_key');
-            authToken = null;
-            currentUser = null;
-            document.getElementById('authContainer').style.display = 'block';
-            document.getElementById('dashboard').style.display = 'none';
-            document.getElementById('logoutBtn').style.display = 'none';
-            document.getElementById('userDisplay').style.display = 'none';
-            showToast('Logged out successfully');
+            // Check OAuth cookie
+            checkOAuthSession().then(authenticated => {
+                if (!authenticated) {
+                    document.getElementById('authContainer').style.display = 'block';
+                    document.getElementById('dashboard').style.display = 'none';
+                    document.getElementById('logoutBtn').style.display = 'none';
+                    document.getElementById('userDisplay').style.display = 'none';
+                }
+            });
         }
 
         function showDashboard() {
             document.getElementById('authContainer').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
             document.getElementById('logoutBtn').style.display = 'inline-block';
-            document.getElementById('userDisplay').style.display = 'inline-block';
-            document.getElementById('usernameDisplay').textContent = 'User';
+            document.getElementById('userDisplay').style.display = 'flex';
+            document.getElementById('usernameDisplay').textContent = currentUser?.name || currentUser?.email || 'User';
+            if (currentUser?.picture) {
+                document.getElementById('userAvatar').src = currentUser.picture;
+            }
         }
 
         // ============================================
@@ -951,7 +1020,6 @@
             document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add('active');
             document.getElementById(`tab-${tabName}`).classList.add('active');
 
-            // Refresh data for specific tabs
             if (tabName === 'keys') loadKeys();
             if (tabName === 'models') loadModels();
             if (tabName === 'overview') loadDashboardData();
@@ -971,6 +1039,7 @@
             const options = {
                 method,
                 headers,
+                credentials: 'include' // Important for OAuth cookies
             };
             if (body) {
                 options.body = JSON.stringify(body);
@@ -978,13 +1047,18 @@
 
             const response = await fetch(`${API_URL}${endpoint}`, options);
 
-            // If 401, clear auth and redirect to login
             if (response.status === 401) {
-                localStorage.removeItem('vostud_api_key');
-                authToken = null;
-                showToast('Session expired. Please login again.', 'error');
-                checkAuth();
-                throw new Error('Unauthorized');
+                // Try refreshing with OAuth
+                const oauthCheck = await checkOAuthSession();
+                if (!oauthCheck) {
+                    localStorage.removeItem('vostud_api_key');
+                    authToken = null;
+                    showToast('Session expired. Please login again.', 'error');
+                    checkAuth();
+                    throw new Error('Unauthorized');
+                }
+                // Retry with OAuth
+                return apiRequest(endpoint, method, body);
             }
 
             const data = await response.json();
@@ -999,20 +1073,16 @@
         // ============================================
         async function loadDashboardData() {
             try {
-                // Get API key stats
                 const stats = await apiRequest('/keys/stats');
                 document.getElementById('statKeys').textContent = stats.total_requests || 0;
                 document.getElementById('statRequests').textContent = stats.last_24h || 0;
 
-                // Get knowledge stats
                 const docStats = await apiRequest('/knowledge-stats');
                 document.getElementById('statDocs').textContent = docStats.total_documents || 0;
 
-                // Get models
                 const models = await apiRequest('/models');
                 document.getElementById('statModels').textContent = models.available_models ? models.available_models.length : 0;
 
-                // Update usage chart placeholder
                 document.getElementById('usageChart').innerHTML = `
                     <div style="text-align: center;">
                         <div style="font-size: 2em;">📊</div>
@@ -1064,7 +1134,6 @@
             }
         }
 
-        // Modal for generating keys
         function openGenerateKeyModal() {
             document.getElementById('modalOverlay').classList.add('show');
             document.getElementById('modalTitle').textContent = '🔑 Generate API Key';
@@ -1106,7 +1175,6 @@
             navigator.clipboard.writeText(text).then(() => {
                 showToast('📋 Copied to clipboard!');
             }).catch(() => {
-                // Fallback
                 const range = document.createRange();
                 const el = document.getElementById(elementId);
                 range.selectNode(el);
@@ -1144,7 +1212,8 @@
                 document.getElementById('autoModeBadge').textContent = autoMode ? '✅ Auto' : '🎯 Manual';
 
                 if (!data.available_models || data.available_models.length === 0) {
-                    grid.innerHTML = `<div style="text-align: center; color: #666; padding: 30px; width: 100%;">No models available</div>`;
+                    grid.innerHTML =
+                        `<div style="text-align: center; color: #666; padding: 30px; width: 100%;">No models available</div>`;
                     return;
                 }
 
@@ -1222,11 +1291,15 @@
                 statusText.textContent = `Uploading ${file.name}... (${i + 1}/${files.length})`;
 
                 try {
+                    const headers = {};
+                    if (authToken) {
+                        headers['X-API-Key'] = authToken;
+                    }
+
                     const response = await fetch(`${API_URL}/upload`, {
                         method: 'POST',
-                        headers: {
-                            'X-API-Key': authToken
-                        },
+                        headers: headers,
+                        credentials: 'include',
                         body: formData
                     });
 
@@ -1248,7 +1321,6 @@
             loadDashboardData();
         });
 
-        // Drag and drop
         const uploadArea = document.getElementById('uploadArea');
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -1270,7 +1342,8 @@
         function addUploadedFile(name, chunks) {
             const container = document.getElementById('uploadedFiles');
             const div = document.createElement('div');
-            div.style.cssText = 'padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;';
+            div.style.cssText =
+                'padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;';
             div.innerHTML = `
                 <span>📄 ${name}</span>
                 <span style="color: #888; font-size: 0.8em;">${chunks || '?'} chunks</span>
@@ -1291,18 +1364,22 @@
             chatBox.scrollTop = chatBox.scrollHeight;
             input.value = '';
 
-            // Add thinking indicator
             const thinkingId = 'thinking-' + Date.now();
             chatBox.innerHTML += `<div class="bot-msg" id="${thinkingId}">🤖 Thinking...</div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
 
             try {
+                const headers = {
+                    'Content-Type': 'application/json',
+                };
+                if (authToken) {
+                    headers['X-API-Key'] = authToken;
+                }
+
                 const response = await fetch(`${API_URL}/chat`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-API-Key': authToken
-                    },
+                    headers: headers,
+                    credentials: 'include',
                     body: JSON.stringify({
                         message: message,
                         use_rag: true
@@ -1311,7 +1388,6 @@
 
                 const data = await response.json();
 
-                // Remove thinking indicator
                 const thinkingEl = document.getElementById(thinkingId);
                 if (thinkingEl) thinkingEl.remove();
 
@@ -1334,14 +1410,18 @@
         // ============================================
         checkAuth();
 
-        // Close modal on overlay click
         document.getElementById('modalOverlay').addEventListener('click', function(e) {
             if (e.target === this) closeModal();
         });
 
-        // Enter key for chat
         document.getElementById('chatInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') sendChatMessage();
+        });
+
+        // Show API key login form toggle
+        document.querySelector('.divider')?.addEventListener('click', function() {
+            const form = document.getElementById('authForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
         });
 
         console.log('🚀 Vostud AI Platform loaded!');
