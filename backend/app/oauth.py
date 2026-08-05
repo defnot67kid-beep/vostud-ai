@@ -4,6 +4,8 @@ Vostud AI - Google OAuth Integration
 
 import os
 import jwt
+import uuid
+import logging
 from datetime import datetime, timedelta
 from fastapi import HTTPException, Depends, Request
 from fastapi.responses import RedirectResponse
@@ -12,7 +14,6 @@ from starlette.config import Config
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional
-import logging
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
