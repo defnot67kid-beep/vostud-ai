@@ -19,7 +19,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # ============================================
-# RATE LIMIT CONFIGURATION - REASONABLE TIERS
+# RATE LIMIT CONFIGURATION
 # ============================================
 
 TIER_LIMITS = {
@@ -52,7 +52,6 @@ TIER_LIMITS = {
     }
 }
 
-# Paths to exclude from rate limiting (internal/analytics endpoints)
 EXCLUDED_PATHS = [
     "/health",
     "/auth/me",
@@ -189,16 +188,44 @@ class TokenUsageTracker:
     async def check_limit(self, user_id: str, tier: str = "free") -> Tuple[bool, str]:
         """Check if user has exceeded their token limit"""
         try:
-            usage = await self.get_usage(user_id, "month")
+            # Get usage from database directly
+            if self.db:
+                cutoff_date = datetime.utcnow() - timedelta(days=30)
+                
+                pipeline = [
+                    {"$match": {
+                        "user_id": user_id,
+                        "timestamp": {"$gte": cutoff_date}
+                    }},
+                    {"$group": {
+                        "_id": None,
+                        "total_tokens": {"$sum": "$tokens_used"},
+                        "total_requests": {"$sum": 1}
+                    }}
+                ]
+                
+                result = list(self.db.usage_logs.aggregate(pipeline))
+                
+                if result:
+                    monthly_tokens = result[0].get("total_tokens", 0)
+                    daily_requests = result[0].get("total_requests", 0)
+                else:
+                    monthly_tokens = 0
+                    daily_requests = 0
+            else:
+                # Use cache fallback
+                usage = await self.get_usage(user_id, "month")
+                monthly_tokens = usage.get("tokens_used", 0)
+                daily_usage = await self.get_usage(user_id, "day")
+                daily_requests = daily_usage.get("requests", 0)
+            
             monthly_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get("tokens_per_month", 50000)
-            
-            if usage["tokens_used"] >= monthly_limit:
-                return False, f"Monthly token limit exceeded ({monthly_limit} tokens). Upgrade your plan."
-            
-            daily_usage = await self.get_usage(user_id, "day")
             daily_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get("requests_per_day", 200)
             
-            if daily_usage["requests"] >= daily_limit:
+            if monthly_tokens >= monthly_limit:
+                return False, f"Monthly token limit exceeded ({monthly_limit} tokens). Upgrade your plan."
+            
+            if daily_requests >= daily_limit:
                 return False, f"Daily request limit exceeded ({daily_limit} requests per day)."
             
             return True, "OK"
@@ -263,8 +290,8 @@ class RateLimitMiddleware:
                     if user:
                         tier = user.get("tier", "free")
                         self.user_tiers[user_id] = tier
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Rate limit user lookup error: {e}")
         
         if not user_id:
             user_id = get_remote_address(request)
