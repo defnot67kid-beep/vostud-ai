@@ -138,7 +138,6 @@
             </div>
         </div>
 
-        <!-- New Ticket -->
         <div class="card">
             <h3>📝 Create Support Ticket</h3>
             <div class="flex" style="flex-direction: column; gap: 10px;">
@@ -155,7 +154,6 @@
             </div>
         </div>
 
-        <!-- My Tickets -->
         <div class="card">
             <div class="flex" style="margin-bottom: 15px;">
                 <h3 style="margin: 0;">📋 Your Tickets</h3>
@@ -164,7 +162,6 @@
             <div id="ticketsTableContainer"><div class="loading">Loading tickets...</div></div>
         </div>
 
-        <!-- Appeal Status -->
         <div class="card">
             <h3>📝 Appeal Status</h3>
             <div id="appealStatus">Loading appeal status...</div>
@@ -221,7 +218,7 @@
             }
 
             try {
-                const result = await apiRequest('/support/ticket', 'POST', {
+                const result = await apiRequest('/api/support/ticket', 'POST', {
                     subject,
                     category,
                     message
@@ -238,7 +235,7 @@
 
         async function loadTickets() {
             try {
-                const data = await apiRequest('/support');
+                const data = await apiRequest('/api/support');
                 if (!data) return;
                 const container = document.getElementById('ticketsTableContainer');
 
@@ -278,7 +275,7 @@
 
         async function viewTicket(ticketId) {
             try {
-                const data = await apiRequest(`/support/ticket/${ticketId}`);
+                const data = await apiRequest(`/api/support/ticket/${ticketId}`);
                 if (!data) return;
 
                 let messagesHtml = data.messages ? data.messages.map(m =>
@@ -291,7 +288,7 @@
 
                 const reply = prompt('Reply to ticket (type message or cancel):');
                 if (reply && reply.trim()) {
-                    await apiRequest(`/support/ticket/${ticketId}/message`, 'POST', { message: reply.trim() });
+                    await apiRequest(`/api/support/ticket/${ticketId}/message`, 'POST', { message: reply.trim() });
                     showToast('Reply sent!', 'success');
                     loadTickets();
                 }
