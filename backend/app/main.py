@@ -408,6 +408,11 @@ class AdminAppealRequest(BaseModel):
     approved: bool
     admin_notes: Optional[str] = None
 
+class PublicAppealRequest(BaseModel):
+    email: str
+    message: str
+    user_id: Optional[str] = None
+
 # ============================================
 # FRONTEND ROUTES
 # ============================================
@@ -791,6 +796,7 @@ Reason: {', '.join(patterns)}
 1. Submit an appeal: POST /support/appeal
 2. Contact support: POST /support/ticket
 3. Check appeal status: GET /support/appeal
+4. If you can't authenticate, use: POST /support/public-appeal
 
 🆔 Your User ID: {user_id}
 
@@ -811,6 +817,7 @@ Reason: {', '.join(patterns)}
 1. Submit an appeal: POST /support/appeal
 2. Contact support: POST /support/ticket
 3. Check appeal status: GET /support/appeal
+4. If you can't authenticate, use: POST /support/public-appeal
 
 🆔 Your User ID: {user_id}
 
@@ -1366,7 +1373,7 @@ async def create_support_ticket(
     request: SupportTicketRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Create a support ticket"""
+    """Create a support ticket (requires authentication)"""
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     
@@ -1387,6 +1394,45 @@ async def create_support_ticket(
     return {
         "ticket_id": ticket_id,
         "message": "Support ticket created. We'll respond as soon as possible."
+    }
+
+@app.post("/support/public-appeal")
+async def public_appeal(
+    request: PublicAppealRequest
+):
+    """Public appeal endpoint for suspended users without API key"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    # Find user by email or user_id
+    user = None
+    if request.user_id:
+        from bson import ObjectId
+        try:
+            user = db.users.find_one({"_id": ObjectId(request.user_id)})
+        except:
+            pass
+    
+    if not user and request.email:
+        user = db.users.find_one({"email": request.email})
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found. Please provide a valid email or user_id.")
+    
+    # Check if user is suspended
+    if user.get("suspension_status") != "suspended":
+        raise HTTPException(status_code=400, detail="Your account is not currently suspended.")
+    
+    # Create appeal
+    appeal_id = db.create_appeal(str(user["_id"]), request.message)
+    if not appeal_id:
+        raise HTTPException(status_code=500, detail="Failed to create appeal")
+    
+    return {
+        "appeal_id": appeal_id,
+        "message": "Appeal submitted successfully. We'll review your case.",
+        "user_id": str(user["_id"]),
+        "email": user.get("email")
     }
 
 @app.post("/support/ticket/{ticket_id}/message")
@@ -1459,7 +1505,7 @@ async def create_appeal(
     request: AppealRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Create a suspension appeal"""
+    """Create a suspension appeal (requires authentication)"""
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     
