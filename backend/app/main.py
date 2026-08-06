@@ -219,22 +219,6 @@ def generate_illegal_activity_report(user_id: str, email: str, message: str, sev
         "status": "reported"
     }
 
-def revoke_all_user_keys(user_id: str, reason: str = "Violation of terms of service") -> int:
-    """Revoke all API keys for a user"""
-    try:
-        if not db:
-            return 0
-        
-        result = db.api_keys.update_many(
-            {"user_id": user_id, "status": "active"},
-            {"$set": {"status": "revoked", "revoked_reason": reason, "revoked_at": datetime.utcnow()}}
-        )
-        
-        return result.modified_count
-    except Exception as e:
-        logger.error(f"❌ Revoke all keys error: {e}")
-        return 0
-
 # ============================================
 # PROFANITY FILTER
 # ============================================
@@ -407,6 +391,22 @@ class CreateKeyResponse(BaseModel):
 
 class ModeSwitchRequest(BaseModel):
     mode: str
+
+# Support Models
+class SupportTicketRequest(BaseModel):
+    subject: str
+    message: str
+    category: str = "general"
+
+class TicketMessageRequest(BaseModel):
+    message: str
+
+class AppealRequest(BaseModel):
+    message: str
+
+class AdminAppealRequest(BaseModel):
+    approved: bool
+    admin_notes: Optional[str] = None
 
 # ============================================
 # FRONTEND ROUTES
@@ -720,7 +720,8 @@ async def get_usage_stats(auth: dict = Depends(require_api_key_or_oauth)):
             "last_24h": summary.get("last_24h", 0),
             "total_keys": summary.get("total_keys", 0),
             "active_keys": summary.get("active_keys", 0),
-            "total_tokens": summary.get("total_tokens", 0)
+            "total_tokens": summary.get("total_tokens", 0),
+            "suspended": summary.get("suspended", False)
         }
     except Exception as e:
         logger.error(f"❌ Stats error: {e}")
@@ -759,52 +760,63 @@ async def chat(
             patterns=patterns
         )
         
-        # Save report to database
         if db:
-            # Create illegal_activity_logs collection if it doesn't exist
-            if not hasattr(db, 'illegal_activity_logs'):
-                db.illegal_activity_logs = db.db["illegal_activity_logs"]
-                db.illegal_activity_logs.create_index("user_id")
-                db.illegal_activity_logs.create_index("timestamp")
-                db.illegal_activity_logs.create_index("severity")
             db.illegal_activity_logs.insert_one(report)
-        
-        # Revoke all keys for this user
-        revoked_count = revoke_all_user_keys(
-            user_id, 
-            f"🚫 Illegal activity detected: {', '.join(patterns)}"
-        )
+            
+            # Suspend the user
+            reason = f"🚫 Illegal activity detected: {', '.join(patterns)}"
+            db.suspend_user(user_id, reason, severity, patterns)
+            
+            # Create automated support ticket
+            db.create_support_ticket(
+                user_id=user_id,
+                subject=f"Account Suspension - {severity.upper()} Severity",
+                message=f"Your account has been automatically suspended due to illegal activity detection.\n\nPatterns detected: {', '.join(patterns)}\n\nTo appeal this suspension, please use the appeal system or contact support.",
+                category="suspension"
+            )
         
         logger.warning(f"🚫 ILLEGAL ACTIVITY DETECTED - User: {email}, Severity: {severity}, Patterns: {patterns}")
-        logger.warning(f"🔑 Revoked {revoked_count} API keys for user {user_id}")
+        logger.warning(f"⛔ User {user_id} has been suspended")
         
         if severity == "critical":
             raise HTTPException(
                 status_code=403,
-                detail=f"""🚫 **ACCOUNT SUSPENDED**
+                detail=f"""🚫 **ACCOUNT PERMANENTLY SUSPENDED**
 
 Your account has been permanently suspended due to severe violation of our Terms of Service.
 
 Reason: {', '.join(patterns)}
 
-This action was taken automatically to protect our platform and users.
+📝 **What you can do:**
+1. Submit an appeal: POST /support/appeal
+2. Contact support: POST /support/ticket
+3. Check appeal status: GET /support/appeal
 
-If you believe this was a mistake, please contact support with your user ID: {user_id}
+🆔 Your User ID: {user_id}
 
-⚠️ All API keys associated with this account have been revoked."""
+⛔ All API keys associated with this account have been revoked.
+
+This decision was made automatically to protect our platform and users."""
             )
         else:
             raise HTTPException(
                 status_code=403,
-                detail=f"""🚫 **ACCESS REVOKED**
+                detail=f"""🚫 **ACCOUNT SUSPENDED**
 
-Your access to Vostud AI has been restricted due to violation of our Terms of Service.
+Your account has been temporarily suspended due to violation of our Terms of Service.
 
 Reason: {', '.join(patterns)}
 
-⚠️ All API keys associated with this account have been revoked.
+📝 **What you can do:**
+1. Submit an appeal: POST /support/appeal
+2. Contact support: POST /support/ticket
+3. Check appeal status: GET /support/appeal
 
-If you believe this was a mistake, please contact support with your user ID: {user_id}"""
+🆔 Your User ID: {user_id}
+
+⛔ All API keys associated with this account have been revoked.
+
+This decision can be reviewed by our support team."""
             )
     
     # Check for profanity
@@ -1066,7 +1078,6 @@ async def upload_document(
                     status_code=403,
                     detail=f"🚫 File rejected. Illegal content detected: {', '.join(patterns)}"
                 )
-            # Reset file position after reading
             await file.seek(0)
         except:
             await file.seek(0)
@@ -1345,6 +1356,292 @@ async def check_usage(auth: dict = Depends(require_api_key_or_oauth)):
         "tier": tier,
         "limits": TIER_LIMITS.get(tier, TIER_LIMITS["free"])
     }
+
+# ============================================
+# SUPPORT & SUSPENSION ENDPOINTS
+# ============================================
+
+@app.post("/support/ticket")
+async def create_support_ticket(
+    request: SupportTicketRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Create a support ticket"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    ticket_id = db.create_support_ticket(
+        user_id=user_id,
+        subject=request.subject,
+        message=request.message,
+        category=request.category
+    )
+    
+    if not ticket_id:
+        raise HTTPException(status_code=500, detail="Failed to create ticket")
+    
+    return {
+        "ticket_id": ticket_id,
+        "message": "Support ticket created. We'll respond as soon as possible."
+    }
+
+@app.post("/support/ticket/{ticket_id}/message")
+async def add_ticket_message(
+    ticket_id: str,
+    request: TicketMessageRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Add a message to a support ticket"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    success = db.add_ticket_message(ticket_id, request.message, from_user=True)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to add message")
+    
+    return {"message": "Message added to ticket"}
+
+@app.get("/support/tickets")
+async def get_user_tickets(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get all support tickets for the user"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    from bson import ObjectId
+    tickets = list(db.support_tickets.find({"user_id": user_id}).sort("created_at", -1))
+    
+    for ticket in tickets:
+        ticket["_id"] = str(ticket["_id"])
+    
+    return {"tickets": tickets}
+
+@app.get("/support/ticket/{ticket_id}")
+async def get_ticket_details(
+    ticket_id: str,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get details of a specific ticket"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    from bson import ObjectId
+    ticket = db.support_tickets.find_one({
+        "_id": ObjectId(ticket_id),
+        "user_id": user_id
+    })
+    
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    ticket["_id"] = str(ticket["_id"])
+    return ticket
+
+@app.post("/support/appeal")
+async def create_appeal(
+    request: AppealRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Create a suspension appeal"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    # Check if user is suspended
+    user = db.users.find_one({"_id": user_id})
+    if not user or user.get("suspension_status") != "suspended":
+        raise HTTPException(status_code=400, detail="Your account is not suspended")
+    
+    appeal_id = db.create_appeal(user_id, request.message)
+    if not appeal_id:
+        raise HTTPException(status_code=500, detail="Failed to create appeal")
+    
+    return {
+        "appeal_id": appeal_id,
+        "message": "Appeal submitted. We'll review your case."
+    }
+
+@app.get("/support/appeal")
+async def get_appeal_status(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get the status of a user's appeal"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    from bson import ObjectId
+    appeal = db.suspension_appeals.find_one({
+        "user_id": user_id
+    }).sort("created_at", -1)
+    
+    if not appeal:
+        return {"status": "no_appeal", "message": "No appeal found"}
+    
+    appeal["_id"] = str(appeal["_id"])
+    return appeal
+
+@app.post("/support/appeal/{appeal_id}/message")
+async def add_appeal_message(
+    appeal_id: str,
+    request: TicketMessageRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Add a message to an appeal"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    success = db.add_appeal_message(appeal_id, request.message, from_user=True)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to add message")
+    
+    return {"message": "Message added to appeal"}
+
+# ============================================
+# ADMIN ENDPOINTS
+# ============================================
+
+@app.get("/admin/suspended-users")
+async def get_suspended_users(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get all suspended users (admin only)"""
+    if auth.get("tier") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    users = list(db.users.find({"suspension_status": "suspended"}))
+    
+    for user in users:
+        user["_id"] = str(user["_id"])
+    
+    return {"suspended_users": users}
+
+@app.post("/admin/unsuspend/{user_id}")
+async def admin_unsuspend_user(
+    user_id: str,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Unsuspend a user (admin only)"""
+    if auth.get("tier") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    from bson import ObjectId
+    user = db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    success = db.unsuspend_user(user_id, "Admin manually restored")
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to unsuspend user")
+    
+    return {"message": f"User {user.get('email')} has been unsuspended"}
+
+@app.get("/admin/appeals")
+async def get_pending_appeals(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get all pending appeals (admin only)"""
+    if auth.get("tier") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    appeals = list(db.suspension_appeals.find({"status": "pending"}).sort("created_at", 1))
+    
+    for appeal in appeals:
+        appeal["_id"] = str(appeal["_id"])
+    
+    return {"appeals": appeals}
+
+@app.post("/admin/appeal/{appeal_id}/resolve")
+async def resolve_appeal(
+    appeal_id: str,
+    request: AdminAppealRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Resolve an appeal (admin only)"""
+    if auth.get("tier") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    from bson import ObjectId
+    appeal = db.suspension_appeals.find_one({"_id": ObjectId(appeal_id)})
+    if not appeal:
+        raise HTTPException(status_code=404, detail="Appeal not found")
+    
+    success = db.resolve_appeal(
+        appeal_id=appeal_id,
+        approved=request.approved,
+        admin_notes=request.admin_notes
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to resolve appeal")
+    
+    return {
+        "message": f"Appeal {appeal_id} resolved. Approved: {request.approved}",
+        "approved": request.approved
+    }
+
+@app.get("/admin/illegal-activity")
+async def get_illegal_activity(
+    limit: int = 50,
+    severity: Optional[str] = None,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Get illegal activity reports (admin only)"""
+    if auth.get("tier") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    query = {}
+    if severity:
+        query["severity"] = severity
+    
+    reports = list(db.illegal_activity_logs.find(query).sort("timestamp", -1).limit(limit))
+    
+    for report in reports:
+        report["_id"] = str(report["_id"])
+    
+    return reports
 
 # ============================================
 # HEALTH & TEST ENDPOINTS
