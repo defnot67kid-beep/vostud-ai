@@ -431,6 +431,185 @@ async def serve_index():
     raise HTTPException(status_code=404, detail="index.html not found")
 
 # ============================================
+# ADMIN PANEL ROUTES
+# ============================================
+
+@app.get("/adminpanel")
+async def admin_panel(auth: dict = Depends(require_api_key_or_oauth)):
+    """Admin panel dashboard"""
+    if auth.get("tier") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    # Get stats
+    total_users = db.users.count_documents({})
+    suspended_users = db.users.count_documents({"suspension_status": "suspended"})
+    pending_appeals = db.suspension_appeals.count_documents({"status": "pending"})
+    total_keys = db.api_keys.count_documents({})
+    
+    return {
+        "status": "admin",
+        "stats": {
+            "total_users": total_users,
+            "suspended_users": suspended_users,
+            "pending_appeals": pending_appeals,
+            "total_api_keys": total_keys
+        },
+        "message": "Welcome to the admin panel"
+    }
+
+@app.get("/adminpanel/users")
+async def admin_users(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Admin - View all users"""
+    if auth.get("tier") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    users = list(db.users.find({}, {"_id": 1, "email": 1, "tier": 1, "suspension_status": 1}))
+    
+    for user in users:
+        user["_id"] = str(user["_id"])
+    
+    return {"users": users}
+
+@app.get("/adminpanel/reports")
+async def admin_reports(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Admin - View illegal activity reports"""
+    if auth.get("tier") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    reports = list(db.illegal_activity_logs.find().sort("timestamp", -1).limit(50))
+    
+    for report in reports:
+        report["_id"] = str(report["_id"])
+    
+    return {"reports": reports}
+
+@app.get("/adminpanel/appeals")
+async def admin_appeals(
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    """Admin - View all appeals"""
+    if auth.get("tier") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    appeals = list(db.suspension_appeals.find().sort("created_at", -1))
+    
+    for appeal in appeals:
+        appeal["_id"] = str(appeal["_id"])
+    
+    return {"appeals": appeals}
+
+# ============================================
+# SUPPORT ROUTES
+# ============================================
+
+@app.get("/support")
+async def support_dashboard(auth: dict = Depends(require_api_key_or_oauth)):
+    """Support dashboard for users"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    
+    # Get user's tickets
+    from bson import ObjectId
+    tickets = list(db.support_tickets.find({"user_id": user_id}).sort("created_at", -1))
+    
+    for ticket in tickets:
+        ticket["_id"] = str(ticket["_id"])
+    
+    return {
+        "user_id": user_id,
+        "tickets": tickets,
+        "message": "Your support tickets"
+    }
+
+@app.post("/support/ticket")
+async def create_support_ticket(
+    request: SupportTicketRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    ticket_id = db.create_support_ticket(
+        user_id=user_id,
+        subject=request.subject,
+        message=request.message,
+        category=request.category
+    )
+    
+    if not ticket_id:
+        raise HTTPException(status_code=500, detail="Failed to create ticket")
+    
+    return {
+        "ticket_id": ticket_id,
+        "message": "Support ticket created. We'll respond as soon as possible."
+    }
+
+@app.post("/support/ticket/{ticket_id}/message")
+async def add_ticket_message(
+    ticket_id: str,
+    request: TicketMessageRequest,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    success = db.add_ticket_message(ticket_id, request.message, from_user=True)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to add message")
+    
+    return {"message": "Message added to ticket"}
+
+@app.get("/support/ticket/{ticket_id}")
+async def get_ticket_details(
+    ticket_id: str,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    
+    from bson import ObjectId
+    ticket = db.support_tickets.find_one({
+        "_id": ObjectId(ticket_id),
+        "user_id": user_id
+    })
+    
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    ticket["_id"] = str(ticket["_id"])
+    return ticket
+
+# ============================================
 # OAUTH ROUTES
 # ============================================
 
@@ -577,7 +756,7 @@ async def generate_api_key(
     create_request: CreateKeyRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Generate a new API key - Rate limited by middleware"""
+    """Generate a new API key"""
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -1275,33 +1454,6 @@ async def check_usage(auth: dict = Depends(require_api_key_or_oauth)):
 # SUPPORT & SUSPENSION ENDPOINTS
 # ============================================
 
-@app.post("/support/ticket")
-async def create_support_ticket(
-    request: SupportTicketRequest,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-    
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    
-    ticket_id = db.create_support_ticket(
-        user_id=user_id,
-        subject=request.subject,
-        message=request.message,
-        category=request.category
-    )
-    
-    if not ticket_id:
-        raise HTTPException(status_code=500, detail="Failed to create ticket")
-    
-    return {
-        "ticket_id": ticket_id,
-        "message": "Support ticket created. We'll respond as soon as possible."
-    }
-
 @app.post("/support/public-appeal")
 async def public_appeal(
     request: PublicAppealRequest
@@ -1336,68 +1488,6 @@ async def public_appeal(
         "user_id": str(user["_id"]),
         "email": user.get("email")
     }
-
-@app.post("/support/ticket/{ticket_id}/message")
-async def add_ticket_message(
-    ticket_id: str,
-    request: TicketMessageRequest,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-    
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    
-    success = db.add_ticket_message(ticket_id, request.message, from_user=True)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to add message")
-    
-    return {"message": "Message added to ticket"}
-
-@app.get("/support/tickets")
-async def get_user_tickets(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-    
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    
-    from bson import ObjectId
-    tickets = list(db.support_tickets.find({"user_id": user_id}).sort("created_at", -1))
-    
-    for ticket in tickets:
-        ticket["_id"] = str(ticket["_id"])
-    
-    return {"tickets": tickets}
-
-@app.get("/support/ticket/{ticket_id}")
-async def get_ticket_details(
-    ticket_id: str,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-    
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    
-    from bson import ObjectId
-    ticket = db.support_tickets.find_one({
-        "_id": ObjectId(ticket_id),
-        "user_id": user_id
-    })
-    
-    if not ticket:
-        raise HTTPException(status_code=404, detail="Ticket not found")
-    
-    ticket["_id"] = str(ticket["_id"])
-    return ticket
 
 @app.post("/support/appeal")
 async def create_appeal(
