@@ -173,7 +173,37 @@
     <script>
         const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ?
             'http://localhost:8000' : 'https://vostud-ai.onrender.com';
-        let authToken = localStorage.getItem('vostud_api_key');
+
+        // ============================================
+        // FIX: Check BOTH localStorage AND cookies
+        // ============================================
+        let authToken = null;
+
+        function getAuthToken() {
+            // First check localStorage
+            const localKey = localStorage.getItem('vostud_api_key');
+            if (localKey) {
+                authToken = localKey;
+                return authToken;
+            }
+
+            // Then check cookies for OAuth token
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'access_token') {
+                    authToken = value;
+                    return authToken;
+                }
+            }
+
+            return null;
+        }
+
+        // Initialize auth token
+        authToken = getAuthToken();
+
+        let currentUser = null;
 
         function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');
@@ -185,17 +215,32 @@
 
         async function apiRequest(endpoint, method = 'GET', body = null) {
             const headers = { 'Content-Type': 'application/json' };
-            if (authToken) headers['X-API-Key'] = authToken;
 
-            const options = { method, headers };
+            // Always try to get fresh token
+            const token = getAuthToken();
+            if (token) {
+                headers['X-API-Key'] = token;
+            }
+
+            const options = { method, headers, credentials: 'include' };
             if (body) options.body = JSON.stringify(body);
 
             const response = await fetch(`${API_URL}${endpoint}`, options);
 
-            if (response.status === 401) {
+            if (response.status === 401 || response.status === 403) {
+                // Try to refresh OAuth session
+                try {
+                    const refreshResponse = await fetch(`${API_URL}/auth/me`, {
+                        credentials: 'include'
+                    });
+                    if (refreshResponse.ok) {
+                        // Retry the original request
+                        return apiRequest(endpoint, method, body);
+                    }
+                } catch (e) {}
+
                 showToast('Session expired. Please login again.', 'error');
-                localStorage.removeItem('vostud_api_key');
-                window.location.href = '/platform';
+                // Don't redirect - just show error
                 return null;
             }
 
@@ -324,26 +369,42 @@
 
         function logout() {
             localStorage.removeItem('vostud_api_key');
+            // Clear cookies too
+            document.cookie = 'access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
             window.location.href = '/platform';
         }
 
         async function init() {
+            // Get fresh token
+            authToken = getAuthToken();
+
+            // If no token, show login prompt instead of redirecting
             if (!authToken) {
-                window.location.href = '/platform';
+                document.getElementById('userDisplay').textContent = '🔒 Not logged in';
+                document.getElementById('ticketsTableContainer').innerHTML = `
+                    <div style="color: #fbbf24; padding: 30px; text-align: center;">
+                        <p style="font-size: 1.2em;">🔑 Please login to access support</p>
+                        <p style="margin-top: 10px;"><a href="/platform" style="color: #667eea;">Go to Platform</a> to login</p>
+                    </div>
+                `;
+                document.getElementById('appealStatus').innerHTML = '<div style="color: #888;">Login to check appeal status</div>';
                 return;
             }
 
             try {
                 const user = await apiRequest('/auth/me');
-                if (!user) return;
-                document.getElementById('userDisplay').textContent = `👤 ${user.user?.email || user.user?.name || 'User'}`;
-                await loadTickets();
-                await loadAppealStatus();
+                if (user) {
+                    currentUser = user.user;
+                    document.getElementById('userDisplay').textContent = `👤 ${currentUser?.email || currentUser?.name || 'User'}`;
+                    await loadTickets();
+                    await loadAppealStatus();
+                }
             } catch (error) {
                 showToast('Error: ' + error.message, 'error');
             }
         }
 
+        // Run init when page loads
         init();
     </script>
 </body>
