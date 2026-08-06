@@ -120,6 +120,24 @@ async def get_current_user(request: Request):
     if not payload:
         return None
     
+    # Get user from database to get current tier
+    try:
+        from app.database import Database
+        from bson import ObjectId
+        db = Database()
+        user = db.users.find_one({"_id": ObjectId(payload.get("sub"))})
+        if user:
+            return {
+                "user_id": payload.get("sub"),
+                "email": payload.get("email"),
+                "name": payload.get("name"),
+                "picture": payload.get("picture"),
+                "tier": user.get("tier", "free")  # Get tier from database
+            }
+    except Exception as e:
+        logger.error(f"❌ Error getting user from database: {e}")
+    
+    # Fallback to token data
     return {
         "user_id": payload.get("sub"),
         "email": payload.get("email"),
@@ -147,8 +165,13 @@ async def require_api_key_or_oauth(request: Request):
             db = Database()
             result = db.validate_api_key(api_key)
             if result["valid"]:
-                # Get user info from database
-                user = db.users.find_one({"_id": result["user_id"]})
+                # Get user info from database including tier
+                from bson import ObjectId
+                try:
+                    user = db.users.find_one({"_id": ObjectId(result["user_id"])})
+                except:
+                    user = db.users.find_one({"_id": result["user_id"]})
+                
                 return {
                     "auth_type": "api_key",
                     "user_id": result["user_id"],
