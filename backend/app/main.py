@@ -701,12 +701,13 @@ async def auth_google_callback(request: Request):
         else:
             user_id = f"user_{uuid.uuid4().hex[:8]}"
         
+        # Include tier in access token
         access_token = create_access_token({
             "sub": user_id,
             "email": email,
             "name": name,
             "picture": picture or "",
-            "tier": "free"
+            "tier": "free"  # Default tier, will be updated from database on validation
         })
         
         if request.session and 'oauth_state' in request.session:
