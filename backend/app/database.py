@@ -132,7 +132,12 @@ class Database:
                 return {"valid": False, "error": "Invalid API key"}
             
             # Check if user is suspended
-            user = self.users.find_one({"_id": key_doc["user_id"]})
+            from bson import ObjectId
+            try:
+                user = self.users.find_one({"_id": ObjectId(key_doc["user_id"])})
+            except:
+                user = self.users.find_one({"_id": key_doc["user_id"]})
+            
             if user and user.get("suspension_status") == "suspended":
                 return {
                     "valid": False, 
@@ -199,8 +204,14 @@ class Database:
     def suspend_user(self, user_id: str, reason: str, severity: str = "high", patterns: list = None) -> bool:
         """Suspend a user account"""
         try:
+            from bson import ObjectId
+            try:
+                user_id_obj = ObjectId(user_id)
+            except:
+                user_id_obj = user_id
+            
             result = self.users.update_one(
-                {"_id": user_id},
+                {"_id": user_id_obj},
                 {
                     "$set": {
                         "suspension_status": "suspended",
@@ -234,8 +245,14 @@ class Database:
     def unsuspend_user(self, user_id: str, reason: str = "Appeal approved") -> bool:
         """Unsuspend a user account"""
         try:
+            from bson import ObjectId
+            try:
+                user_id_obj = ObjectId(user_id)
+            except:
+                user_id_obj = user_id
+            
             result = self.users.update_one(
-                {"_id": user_id},
+                {"_id": user_id_obj},
                 {
                     "$set": {
                         "suspension_status": "active",
@@ -433,7 +450,11 @@ class Database:
             
             keys = list(self.api_keys.find({"user_id": user_id}))
             
-            user = self.users.find_one({"_id": user_id})
+            from bson import ObjectId
+            try:
+                user = self.users.find_one({"_id": ObjectId(user_id)})
+            except:
+                user = self.users.find_one({"_id": user_id})
             
             return {
                 "total_requests": total_usage,
