@@ -1,6 +1,6 @@
 """
 Vostud AI - MongoDB Database Connection
-Handles API keys, usage tracking, and user data
+Handles API keys, usage tracking, user data, and suspension system
 """
 
 import os
@@ -31,6 +31,9 @@ class Database:
             self.usage_logs = self.db["usage_logs"]
             self.users = self.db["users"]
             self.models = self.db["models"]
+            self.illegal_activity_logs = self.db["illegal_activity_logs"]
+            self.support_tickets = self.db["support_tickets"]
+            self.suspension_appeals = self.db["suspension_appeals"]
             
             self._create_indexes()
             
@@ -56,6 +59,19 @@ class Database:
             self.users.create_index("email", unique=True)
             self.users.create_index("username", unique=True)
             self.users.create_index("auth_provider")
+            self.users.create_index("suspension_status")
+            
+            self.illegal_activity_logs.create_index("user_id")
+            self.illegal_activity_logs.create_index("timestamp")
+            self.illegal_activity_logs.create_index("severity")
+            
+            self.support_tickets.create_index("user_id")
+            self.support_tickets.create_index("status")
+            self.support_tickets.create_index("created_at")
+            
+            self.suspension_appeals.create_index("user_id")
+            self.suspension_appeals.create_index("status")
+            self.suspension_appeals.create_index("created_at")
             
             logger.info("✅ Database indexes created")
         except Exception as e:
@@ -115,6 +131,14 @@ class Database:
             if not key_doc:
                 return {"valid": False, "error": "Invalid API key"}
             
+            # Check if user is suspended
+            user = self.users.find_one({"_id": key_doc["user_id"]})
+            if user and user.get("suspension_status") == "suspended":
+                return {
+                    "valid": False, 
+                    "error": f"⛔ Your account has been suspended. Reason: {user.get('suspension_reason', 'Violation of Terms of Service')}"
+                }
+            
             if key_doc["expires_at"] < datetime.utcnow():
                 self.api_keys.update_one(
                     {"key": hashed_key},
@@ -144,16 +168,13 @@ class Database:
                   cost: float = 0.0):
         """Log API usage for tracking"""
         try:
-            # Count usage for API key
             if api_key:
                 hashed_key = self.hash_api_key(api_key)
-                # Increment usage_count on the API key
                 self.api_keys.update_one(
                     {"key": hashed_key},
                     {"$inc": {"usage_count": 1}}
                 )
             
-            # Insert usage log
             usage_doc = {
                 "user_id": user_id,
                 "timestamp": datetime.utcnow(),
@@ -172,97 +193,266 @@ class Database:
             
             self.usage_logs.insert_one(usage_doc)
             
-            logger.info(f"📊 Usage logged: {user_id} - {endpoint} - {tokens_used} tokens")
-            
         except Exception as e:
             logger.error(f"❌ Log usage error: {e}")
     
-    def get_key_stats(self, user_id: str) -> dict:
-        """Get API key statistics for a user"""
+    def suspend_user(self, user_id: str, reason: str, severity: str = "high", patterns: list = None) -> bool:
+        """Suspend a user account"""
         try:
-            keys = list(self.api_keys.find({"user_id": user_id}))
+            result = self.users.update_one(
+                {"_id": user_id},
+                {
+                    "$set": {
+                        "suspension_status": "suspended",
+                        "suspension_reason": reason,
+                        "suspension_severity": severity,
+                        "suspended_at": datetime.utcnow(),
+                        "suspension_patterns": patterns or []
+                    }
+                }
+            )
             
-            total_keys = len(keys)
-            active_keys = sum(1 for k in keys if k.get("status") == "active")
-            total_usage = sum(k.get("usage_count", 0) for k in keys)
+            if result.modified_count > 0:
+                # Revoke all active keys
+                self.api_keys.update_many(
+                    {"user_id": user_id, "status": "active"},
+                    {
+                        "$set": {
+                            "status": "revoked",
+                            "revoked_reason": f"Suspended: {reason}",
+                            "revoked_at": datetime.utcnow()
+                        }
+                    }
+                )
+                return True
             
-            return {
-                "total_keys": total_keys,
-                "active_keys": active_keys,
-                "total_usage": total_usage,
-                "keys": [{
-                    "key_prefix": k.get("key_prefix"),
-                    "name": k.get("name"),
-                    "status": k.get("status"),
-                    "usage_count": k.get("usage_count", 0)
-                } for k in keys]
-            }
+            return False
         except Exception as e:
-            logger.error(f"❌ Get key stats error: {e}")
-            return {"total_keys": 0, "active_keys": 0, "total_usage": 0, "keys": []}
+            logger.error(f"❌ Suspend user error: {e}")
+            return False
     
-    def revoke_api_key(self, api_key: str) -> bool:
-        """Revoke an API key"""
+    def unsuspend_user(self, user_id: str, reason: str = "Appeal approved") -> bool:
+        """Unsuspend a user account"""
         try:
-            hashed_key = self.hash_api_key(api_key)
-            result = self.api_keys.update_one(
-                {"key": hashed_key},
-                {"$set": {"status": "revoked"}}
+            result = self.users.update_one(
+                {"_id": user_id},
+                {
+                    "$set": {
+                        "suspension_status": "active",
+                        "unsuspended_at": datetime.utcnow(),
+                        "unsuspension_reason": reason
+                    }
+                }
             )
             return result.modified_count > 0
         except Exception as e:
-            logger.error(f"❌ Revoke API key error: {e}")
+            logger.error(f"❌ Unsuspend user error: {e}")
             return False
     
-    def get_key_info(self, api_key: str) -> dict:
-        """Get information about an API key"""
+    def get_user_by_email(self, email: str) -> dict:
+        """Get user by email"""
         try:
-            hashed_key = self.hash_api_key(api_key)
-            key_doc = self.api_keys.find_one({"key": hashed_key})
-            
-            if not key_doc:
-                return None
-            
-            return {
-                "user_id": key_doc.get("user_id"),
-                "name": key_doc.get("name"),
-                "status": key_doc.get("status"),
-                "created_at": key_doc.get("created_at"),
-                "expires_at": key_doc.get("expires_at"),
-                "last_used": key_doc.get("last_used"),
-                "usage_count": key_doc.get("usage_count", 0),
-                "rate_limit": key_doc.get("rate_limit", 1000)
-            }
+            return self.users.find_one({"email": email})
         except Exception as e:
-            logger.error(f"❌ Get key info error: {e}")
+            logger.error(f"❌ Get user by email error: {e}")
             return None
     
-    def create_user(self, email: str, username: str, password: str = None):
-        """Create a new user"""
+    def create_support_ticket(self, user_id: str, subject: str, message: str, category: str = "general") -> str:
+        """Create a support ticket"""
         try:
-            from passlib.hash import bcrypt
-            
-            user_doc = {
-                "email": email,
-                "username": username,
-                "display_name": username,
+            ticket = {
+                "user_id": user_id,
+                "subject": subject,
+                "message": message,
+                "category": category,
+                "status": "open",
                 "created_at": datetime.utcnow(),
-                "auth_provider": "email",
-                "api_keys": [],
-                "settings": {
-                    "default_model": "auto",
-                    "notifications": True
-                }
+                "updated_at": datetime.utcnow(),
+                "messages": [
+                    {
+                        "from": "user",
+                        "message": message,
+                        "timestamp": datetime.utcnow()
+                    }
+                ]
             }
             
-            if password:
-                user_doc["password_hash"] = bcrypt.hash(password)
-            
-            self.users.insert_one(user_doc)
-            return user_doc
+            result = self.support_tickets.insert_one(ticket)
+            return str(result.inserted_id)
         except Exception as e:
-            logger.error(f"❌ Create user error: {e}")
+            logger.error(f"❌ Create support ticket error: {e}")
             return None
+    
+    def add_ticket_message(self, ticket_id: str, message: str, from_user: bool = True) -> bool:
+        """Add a message to a support ticket"""
+        try:
+            from bson import ObjectId
+            result = self.support_tickets.update_one(
+                {"_id": ObjectId(ticket_id)},
+                {
+                    "$push": {
+                        "messages": {
+                            "from": "user" if from_user else "admin",
+                            "message": message,
+                            "timestamp": datetime.utcnow()
+                        }
+                    },
+                    "$set": {
+                        "updated_at": datetime.utcnow(),
+                        "status": "open" if from_user else "in_progress"
+                    }
+                }
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f"❌ Add ticket message error: {e}")
+            return False
+    
+    def close_ticket(self, ticket_id: str) -> bool:
+        """Close a support ticket"""
+        try:
+            from bson import ObjectId
+            result = self.support_tickets.update_one(
+                {"_id": ObjectId(ticket_id)},
+                {
+                    "$set": {
+                        "status": "closed",
+                        "closed_at": datetime.utcnow(),
+                        "updated_at": datetime.utcnow()
+                    }
+                }
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f"❌ Close ticket error: {e}")
+            return False
+    
+    def create_appeal(self, user_id: str, message: str) -> str:
+        """Create a suspension appeal"""
+        try:
+            appeal = {
+                "user_id": user_id,
+                "message": message,
+                "status": "pending",
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+                "messages": [
+                    {
+                        "from": "user",
+                        "message": message,
+                        "timestamp": datetime.utcnow()
+                    }
+                ]
+            }
+            
+            result = self.suspension_appeals.insert_one(appeal)
+            return str(result.inserted_id)
+        except Exception as e:
+            logger.error(f"❌ Create appeal error: {e}")
+            return None
+    
+    def add_appeal_message(self, appeal_id: str, message: str, from_user: bool = True) -> bool:
+        """Add a message to an appeal"""
+        try:
+            from bson import ObjectId
+            result = self.suspension_appeals.update_one(
+                {"_id": ObjectId(appeal_id)},
+                {
+                    "$push": {
+                        "messages": {
+                            "from": "user" if from_user else "admin",
+                            "message": message,
+                            "timestamp": datetime.utcnow()
+                        }
+                    },
+                    "$set": {
+                        "updated_at": datetime.utcnow(),
+                        "status": "pending" if from_user else "in_review"
+                    }
+                }
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f"❌ Add appeal message error: {e}")
+            return False
+    
+    def resolve_appeal(self, appeal_id: str, approved: bool, admin_notes: str = None) -> bool:
+        """Resolve a suspension appeal"""
+        try:
+            from bson import ObjectId
+            appeal = self.suspension_appeals.find_one({"_id": ObjectId(appeal_id)})
+            if not appeal:
+                return False
+            
+            status = "approved" if approved else "denied"
+            result = self.suspension_appeals.update_one(
+                {"_id": ObjectId(appeal_id)},
+                {
+                    "$set": {
+                        "status": status,
+                        "resolved_at": datetime.utcnow(),
+                        "admin_notes": admin_notes,
+                        "updated_at": datetime.utcnow()
+                    }
+                }
+            )
+            
+            if approved and result.modified_count > 0:
+                # Unsuspend the user
+                self.unsuspend_user(appeal["user_id"], "Appeal approved")
+            
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f"❌ Resolve appeal error: {e}")
+            return False
+    
+    def get_user_usage_summary(self, user_id: str) -> dict:
+        """Get a summary of user usage for the dashboard"""
+        try:
+            total_usage = self.usage_logs.count_documents({"user_id": user_id})
+            
+            cutoff_24h = datetime.utcnow() - timedelta(hours=24)
+            last_24h = self.usage_logs.count_documents({
+                "user_id": user_id,
+                "timestamp": {"$gte": cutoff_24h}
+            })
+            
+            cutoff_30d = datetime.utcnow() - timedelta(days=30)
+            pipeline = [
+                {"$match": {
+                    "user_id": user_id,
+                    "timestamp": {"$gte": cutoff_30d}
+                }},
+                {"$group": {
+                    "_id": None,
+                    "total_tokens": {"$sum": "$tokens_used"}
+                }}
+            ]
+            result = list(self.usage_logs.aggregate(pipeline))
+            total_tokens = result[0].get("total_tokens", 0) if result else 0
+            
+            keys = list(self.api_keys.find({"user_id": user_id}))
+            
+            user = self.users.find_one({"_id": user_id})
+            
+            return {
+                "total_requests": total_usage,
+                "last_24h": last_24h,
+                "total_tokens": total_tokens,
+                "total_keys": len(keys),
+                "active_keys": sum(1 for k in keys if k.get("status") == "active"),
+                "suspended": user.get("suspension_status") == "suspended" if user else False
+            }
+        except Exception as e:
+            logger.error(f"❌ Get user usage summary error: {e}")
+            return {
+                "total_requests": 0,
+                "last_24h": 0,
+                "total_tokens": 0,
+                "total_keys": 0,
+                "active_keys": 0,
+                "suspended": False
+            }
     
     def get_usage_stats(self, user_id: str, days: int = 30) -> dict:
         """Get usage statistics for a user"""
@@ -365,51 +555,3 @@ class Database:
         except Exception as e:
             logger.error(f"❌ Get detailed usage error: {e}")
             return []
-    
-    def get_user_usage_summary(self, user_id: str) -> dict:
-        """Get a summary of user usage for the dashboard"""
-        try:
-            # Total usage ever
-            total_usage = self.usage_logs.count_documents({"user_id": user_id})
-            
-            # Last 24 hours
-            cutoff_24h = datetime.utcnow() - timedelta(hours=24)
-            last_24h = self.usage_logs.count_documents({
-                "user_id": user_id,
-                "timestamp": {"$gte": cutoff_24h}
-            })
-            
-            # Last 30 days tokens
-            cutoff_30d = datetime.utcnow() - timedelta(days=30)
-            pipeline = [
-                {"$match": {
-                    "user_id": user_id,
-                    "timestamp": {"$gte": cutoff_30d}
-                }},
-                {"$group": {
-                    "_id": None,
-                    "total_tokens": {"$sum": "$tokens_used"}
-                }}
-            ]
-            result = list(self.usage_logs.aggregate(pipeline))
-            total_tokens = result[0].get("total_tokens", 0) if result else 0
-            
-            # API key stats
-            keys = list(self.api_keys.find({"user_id": user_id}))
-            
-            return {
-                "total_requests": total_usage,
-                "last_24h": last_24h,
-                "total_tokens": total_tokens,
-                "total_keys": len(keys),
-                "active_keys": sum(1 for k in keys if k.get("status") == "active")
-            }
-        except Exception as e:
-            logger.error(f"❌ Get user usage summary error: {e}")
-            return {
-                "total_requests": 0,
-                "last_24h": 0,
-                "total_tokens": 0,
-                "total_keys": 0,
-                "active_keys": 0
-            }
