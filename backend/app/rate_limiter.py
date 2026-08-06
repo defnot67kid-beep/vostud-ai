@@ -88,25 +88,24 @@ EXCLUDED_PATHS = [
 # In-memory request tracking
 _request_counts = defaultdict(list)
 
-def rate_limit(limit_per_minute: int = 10, key_func=None):
+def rate_limit(limit_per_minute: int = 10):
     """
     Simple rate limit decorator
     
     Usage:
         @rate_limit(limit_per_minute=10)
-        async def my_endpoint(request: Request):
+        async def my_endpoint(request: Request, ...):
             ...
     """
     def decorator(func):
         async def wrapper(*args, **kwargs):
-            # Get request from args or kwargs
-            request = None
-            for arg in args:
-                if isinstance(arg, Request):
-                    request = arg
-                    break
-            if not request and "request" in kwargs:
-                request = kwargs["request"]
+            # Get request from kwargs or args
+            request = kwargs.get("request")
+            if not request:
+                for arg in args:
+                    if isinstance(arg, Request):
+                        request = arg
+                        break
             
             if request:
                 # Build rate limit key
@@ -115,26 +114,29 @@ def rate_limit(limit_per_minute: int = 10, key_func=None):
                 
                 if api_key:
                     # Use API key hash for rate limiting
-                    key = f"apikey:{hashlib.md5(api_key.encode()).hexdigest()[:10]}:{int(time.time() / 60)}"
+                    key = f"apikey:{hashlib.md5(api_key.encode()).hexdigest()[:10]}"
                 else:
-                    key = f"ip:{client_ip}:{int(time.time() / 60)}"
+                    key = f"ip:{client_ip}"
+                
+                minute_key = f"{key}:{int(time.time() / 60)}"
                 
                 # Clean old entries (older than 60 seconds)
-                if key in _request_counts:
-                    _request_counts[key] = [t for t in _request_counts[key] if time.time() - t < 60]
+                if minute_key in _request_counts:
+                    _request_counts[minute_key] = [t for t in _request_counts[minute_key] if time.time() - t < 60]
                 else:
-                    _request_counts[key] = []
+                    _request_counts[minute_key] = []
                 
                 # Check limit
-                if len(_request_counts[key]) >= limit_per_minute:
+                if len(_request_counts[minute_key]) >= limit_per_minute:
                     raise HTTPException(
                         status_code=429,
                         detail=f"Rate limit exceeded. Max {limit_per_minute} requests per minute."
                     )
                 
                 # Add current request
-                _request_counts[key].append(time.time())
+                _request_counts[minute_key].append(time.time())
             
+            # Call the original function
             return await func(*args, **kwargs)
         return wrapper
     return decorator
