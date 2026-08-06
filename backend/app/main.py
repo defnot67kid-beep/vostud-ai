@@ -147,6 +147,95 @@ except Exception as e:
 app.add_middleware(RateLimitMiddleware, db=db, token_tracker=token_tracker)
 
 # ============================================
+# ILLEGAL ACTIVITY DETECTION
+# ============================================
+
+ILLEGAL_ACTIVITY_PATTERNS = {
+    # Hacking/Exploits
+    "sql_injection": r'\b(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|EXEC|EXECUTE)\b.*?\b(?:FROM|INTO|TABLE|DATABASE)\b',
+    "xss": r'<script.*?>.*?</script>',
+    "eval": r'\b(?:eval|exec|system|shell_exec|passthru|popen|proc_open)\s*\(',
+    
+    # Malware/Viruses
+    "malware": r'\b(?:virus|malware|trojan|ransomware|keylogger|rootkit|worm)\b',
+    
+    # Exploitation
+    "exploit": r'\b(?:exploit|vulnerability|backdoor|shellcode|buffer.?overflow|zero.?day)\b',
+    
+    # Illegal Activities
+    "drugs": r'\b(?:cocaine|heroin|meth|ecstasy|lsd|marijuana|cannabis|drug|trafficking)\b',
+    "weapons": r'\b(?:gun|firearm|explosive|bomb|ammunition|weapon|knife|sword)\b',
+    "fraud": r'\b(?:fraud|scam|phishing|identity.?theft|credit.?card|stolen|hack|crack)\b',
+    "terrorism": r'\b(?:terrorist|terrorism|isis|al-qaeda|bomb|attack|jihad|extremist)\b',
+    "pornography": r'\b(?:porn|xxx|explicit|nsfw|adult.?content|child.?abuse|underage)\b',
+    "human_trafficking": r'\b(?:trafficking|slavery|forced.?labor|human.?smuggling)\b',
+    "piracy": r'\b(?:pirate|pirated|torrent|crack|keygen|serial|license|bypass|DRM|rip)\b',
+}
+
+SEVERITY_LEVELS = {
+    "critical": ["terrorism", "human_trafficking", "pornography"],
+    "high": ["malware", "exploit", "weapons", "fraud", "drugs"],
+    "medium": ["sql_injection", "xss", "eval", "piracy"],
+    "low": []
+}
+
+def detect_illegal_activity(text: str) -> tuple:
+    """Detect illegal activity in text. Returns (is_illegal, severity, detected_patterns)"""
+    if not text:
+        return False, None, []
+    
+    text_lower = text.lower()
+    detected = []
+    severity = None
+    
+    for pattern_name, pattern in ILLEGAL_ACTIVITY_PATTERNS.items():
+        if re.search(pattern, text, re.IGNORECASE):
+            detected.append(pattern_name)
+    
+    if detected:
+        if any(p in SEVERITY_LEVELS["critical"] for p in detected):
+            severity = "critical"
+        elif any(p in SEVERITY_LEVELS["high"] for p in detected):
+            severity = "high"
+        elif any(p in SEVERITY_LEVELS["medium"] for p in detected):
+            severity = "medium"
+        else:
+            severity = "low"
+        
+        return True, severity, detected
+    
+    return False, None, []
+
+def generate_illegal_activity_report(user_id: str, email: str, message: str, severity: str, patterns: list) -> dict:
+    """Generate a report for illegal activity"""
+    return {
+        "user_id": user_id,
+        "email": email,
+        "timestamp": datetime.utcnow().isoformat(),
+        "severity": severity,
+        "patterns": patterns,
+        "message": message[:500],
+        "ip": None,
+        "status": "reported"
+    }
+
+def revoke_all_user_keys(user_id: str, reason: str = "Violation of terms of service") -> int:
+    """Revoke all API keys for a user"""
+    try:
+        if not db:
+            return 0
+        
+        result = db.api_keys.update_many(
+            {"user_id": user_id, "status": "active"},
+            {"$set": {"status": "revoked", "revoked_reason": reason, "revoked_at": datetime.utcnow()}}
+        )
+        
+        return result.modified_count
+    except Exception as e:
+        logger.error(f"❌ Revoke all keys error: {e}")
+        return 0
+
+# ============================================
 # PROFANITY FILTER
 # ============================================
 
@@ -624,7 +713,6 @@ async def get_usage_stats(auth: dict = Depends(require_api_key_or_oauth)):
         if not user_id:
             raise HTTPException(status_code=400, detail="User ID not found")
         
-        # Get user usage summary
         summary = db.get_user_usage_summary(user_id)
         
         return {
@@ -652,12 +740,81 @@ async def chat(
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
+    # ============================================
+    # CHECK FOR ILLEGAL ACTIVITY
+    # ============================================
+    is_illegal, severity, patterns = detect_illegal_activity(chat_request.message)
+    
+    if is_illegal and severity in ["critical", "high"]:
+        user_id = auth.get("user_id") or auth.get("sub")
+        email = auth.get("email", "unknown")
+        api_key = request.headers.get("X-API-Key")
+        
+        # Generate report
+        report = generate_illegal_activity_report(
+            user_id=user_id,
+            email=email,
+            message=chat_request.message,
+            severity=severity,
+            patterns=patterns
+        )
+        
+        # Save report to database
+        if db:
+            # Create illegal_activity_logs collection if it doesn't exist
+            if not hasattr(db, 'illegal_activity_logs'):
+                db.illegal_activity_logs = db.db["illegal_activity_logs"]
+                db.illegal_activity_logs.create_index("user_id")
+                db.illegal_activity_logs.create_index("timestamp")
+                db.illegal_activity_logs.create_index("severity")
+            db.illegal_activity_logs.insert_one(report)
+        
+        # Revoke all keys for this user
+        revoked_count = revoke_all_user_keys(
+            user_id, 
+            f"🚫 Illegal activity detected: {', '.join(patterns)}"
+        )
+        
+        logger.warning(f"🚫 ILLEGAL ACTIVITY DETECTED - User: {email}, Severity: {severity}, Patterns: {patterns}")
+        logger.warning(f"🔑 Revoked {revoked_count} API keys for user {user_id}")
+        
+        if severity == "critical":
+            raise HTTPException(
+                status_code=403,
+                detail=f"""🚫 **ACCOUNT SUSPENDED**
+
+Your account has been permanently suspended due to severe violation of our Terms of Service.
+
+Reason: {', '.join(patterns)}
+
+This action was taken automatically to protect our platform and users.
+
+If you believe this was a mistake, please contact support with your user ID: {user_id}
+
+⚠️ All API keys associated with this account have been revoked."""
+            )
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail=f"""🚫 **ACCESS REVOKED**
+
+Your access to Vostud AI has been restricted due to violation of our Terms of Service.
+
+Reason: {', '.join(patterns)}
+
+⚠️ All API keys associated with this account have been revoked.
+
+If you believe this was a mistake, please contact support with your user ID: {user_id}"""
+            )
+    
+    # Check for profanity
     if contains_profanity(chat_request.message):
         raise HTTPException(
             status_code=400, 
             detail="❌ Your message contains inappropriate language. Please keep the conversation professional."
         )
     
+    # Validate model
     model_to_use = chat_request.model
     
     if not model_to_use:
@@ -678,10 +835,7 @@ async def chat(
         raise HTTPException(status_code=429, detail=message)
     
     try:
-        # Get API key from headers
         api_key = request.headers.get("X-API-Key")
-        
-        # Calculate tokens
         tokens_used = len(chat_request.message) // 4
         
         response = chat_engine.generate_response(
@@ -694,7 +848,6 @@ async def chat(
         tokens_used += len(response) // 4
         model_used = chat_engine.current_api or "unknown"
         
-        # Log usage in database
         if db:
             db.log_usage(
                 user_id=user_id,
@@ -747,6 +900,14 @@ async def chat_public(request: Request, chat_request: ChatRequest):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
+    # Check for illegal activity in public chat
+    is_illegal, severity, patterns = detect_illegal_activity(chat_request.message)
+    if is_illegal and severity in ["critical", "high"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"🚫 Access denied. Illegal activity detected: {', '.join(patterns)}"
+        )
+    
     if contains_profanity(chat_request.message):
         raise HTTPException(
             status_code=400, 
@@ -782,6 +943,14 @@ async def get_sources_only(
 ):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    # Check for illegal activity
+    is_illegal, severity, patterns = detect_illegal_activity(chat_request.message)
+    if is_illegal and severity in ["critical", "high"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"🚫 Access denied. Illegal activity detected: {', '.join(patterns)}"
+        )
     
     if contains_profanity(chat_request.message):
         raise HTTPException(
@@ -886,6 +1055,22 @@ async def upload_document(
     
     user_id = auth.get("user_id") or auth.get("sub")
     
+    # Check uploaded file content for illegal activity (for text files)
+    if file_ext == '.txt':
+        try:
+            content = await file.read()
+            file_text = content.decode('utf-8', errors='ignore')
+            is_illegal, severity, patterns = detect_illegal_activity(file_text)
+            if is_illegal and severity in ["critical", "high"]:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"🚫 File rejected. Illegal content detected: {', '.join(patterns)}"
+                )
+            # Reset file position after reading
+            await file.seek(0)
+        except:
+            await file.seek(0)
+    
     try:
         os.makedirs("./data/uploaded_docs", exist_ok=True)
         file_path = f"./data/uploaded_docs/{file.filename}"
@@ -917,6 +1102,14 @@ async def add_text(
 ):
     if not rag_engine:
         raise HTTPException(status_code=400, detail="RAG engine not available")
+    
+    # Check for illegal activity
+    is_illegal, severity, patterns = detect_illegal_activity(text)
+    if is_illegal and severity in ["critical", "high"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"🚫 Content rejected. Illegal activity detected: {', '.join(patterns)}"
+        )
     
     if contains_profanity(text):
         raise HTTPException(
@@ -950,6 +1143,14 @@ async def generate_quiz(
 ):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
+    
+    # Check for illegal activity in topic
+    is_illegal, severity, patterns = detect_illegal_activity(quiz_request.topic)
+    if is_illegal and severity in ["critical", "high"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"🚫 Topic rejected. Illegal activity detected: {', '.join(patterns)}"
+        )
     
     if contains_profanity(quiz_request.topic):
         raise HTTPException(
@@ -1084,7 +1285,6 @@ async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
     
     tier = auth.get("tier", "free")
     
-    # Get usage from database directly
     if db:
         cutoff_date = datetime.utcnow() - timedelta(days=30)
         pipeline = [
@@ -1103,7 +1303,6 @@ async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
         monthly_tokens = result[0].get("tokens_used", 0) if result else 0
         monthly_requests = result[0].get("requests", 0) if result else 0
         
-        # Daily usage
         cutoff_daily = datetime.utcnow() - timedelta(days=1)
         daily_requests = db.usage_logs.count_documents({
             "user_id": user_id,
@@ -1124,7 +1323,6 @@ async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
             }
         }
     
-    # Fallback to token tracker
     usage = await token_tracker.get_usage(user_id, "month")
     daily_usage = await token_tracker.get_usage(user_id, "day")
     return {
