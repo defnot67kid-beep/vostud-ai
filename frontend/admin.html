@@ -5,11 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vostud AI - Admin Panel</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #0f0c29;
@@ -17,11 +13,8 @@
             padding: 20px;
             min-height: 100vh;
         }
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        .header { 
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -37,11 +30,7 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        .header-actions {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
+        .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
         .btn {
             padding: 10px 20px;
             border: none;
@@ -51,28 +40,11 @@
             transition: transform 0.2s;
             font-size: 0.9em;
         }
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-        }
-        .btn-danger {
-            background: rgba(248, 113, 113, 0.2);
-            color: #f87171;
-            border: 1px solid rgba(248, 113, 113, 0.3);
-        }
-        .btn-success {
-            background: rgba(74, 222, 128, 0.2);
-            color: #4ade80;
-            border: 1px solid rgba(74, 222, 128, 0.3);
-        }
-        .btn-secondary {
-            background: rgba(255,255,255,0.1);
-            color: white;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .btn-danger { background: rgba(248,113,113,0.2); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+        .btn-success { background: rgba(74,222,128,0.2); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+        .btn-secondary { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.1); }
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -93,11 +65,7 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        .stat-card .label {
-            color: #aaa;
-            font-size: 0.9em;
-            margin-top: 5px;
-        }
+        .stat-card .label { color: #aaa; font-size: 0.9em; margin-top: 5px; }
         .card {
             background: rgba(255,255,255,0.05);
             border-radius: 12px;
@@ -105,10 +73,7 @@
             margin-bottom: 20px;
             border: 1px solid rgba(255,255,255,0.05);
         }
-        .card h3 {
-            margin-bottom: 15px;
-            color: #ddd;
-        }
+        .card h3 { margin-bottom: 15px; color: #ddd; }
         .tabs {
             display: flex;
             gap: 5px;
@@ -127,19 +92,10 @@
             font-weight: 500;
             transition: background 0.3s;
         }
-        .tab:hover {
-            background: rgba(255,255,255,0.05);
-        }
-        .tab.active {
-            background: rgba(102,126,234,0.2);
-            color: #667eea;
-        }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
-        }
+        .tab:hover { background: rgba(255,255,255,0.05); }
+        .tab.active { background: rgba(102,126,234,0.2); color: #667eea; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -150,15 +106,8 @@
             text-align: left;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
-        th {
-            color: #888;
-            font-weight: 600;
-            font-size: 0.8em;
-            text-transform: uppercase;
-        }
-        tr:hover {
-            background: rgba(255,255,255,0.03);
-        }
+        th { color: #888; font-weight: 600; font-size: 0.8em; text-transform: uppercase; }
+        tr:hover { background: rgba(255,255,255,0.03); }
         .badge {
             padding: 2px 10px;
             border-radius: 10px;
@@ -226,7 +175,6 @@
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
         <div class="header">
             <h1>🛡️ Vostud AI Admin Panel</h1>
             <div class="header-actions">
@@ -236,7 +184,6 @@
             </div>
         </div>
 
-        <!-- Stats -->
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card"><div class="number" id="statUsers">0</div><div class="label">Total Users</div></div>
             <div class="stat-card"><div class="number" id="statSuspended">0</div><div class="label">Suspended</div></div>
@@ -244,27 +191,22 @@
             <div class="stat-card"><div class="number" id="statKeys">0</div><div class="label">API Keys</div></div>
         </div>
 
-        <!-- Tabs -->
         <div class="tabs">
             <button class="tab active" data-tab="users" onclick="switchTab('users')">👥 Users</button>
             <button class="tab" data-tab="appeals" onclick="switchTab('appeals')">📝 Appeals</button>
             <button class="tab" data-tab="reports" onclick="switchTab('reports')">🚨 Reports</button>
         </div>
 
-        <!-- Tab: Users -->
         <div class="tab-content active" id="tab-users">
             <div class="card">
                 <div class="flex" style="margin-bottom: 15px;">
                     <h3 style="margin: 0;">All Users</h3>
                     <button class="btn btn-secondary" onclick="loadUsers()">🔄 Refresh</button>
-                    <button class="btn btn-danger" onclick="suspendUser()">⛔ Suspend User</button>
-                    <button class="btn btn-success" onclick="unsuspendUser()">✅ Unsuspend</button>
                 </div>
                 <div id="usersTableContainer"><div class="loading">Loading users...</div></div>
             </div>
         </div>
 
-        <!-- Tab: Appeals -->
         <div class="tab-content" id="tab-appeals">
             <div class="card">
                 <div class="flex" style="margin-bottom: 15px;">
@@ -275,7 +217,6 @@
             </div>
         </div>
 
-        <!-- Tab: Reports -->
         <div class="tab-content" id="tab-reports">
             <div class="card">
                 <div class="flex" style="margin-bottom: 15px;">
@@ -353,7 +294,7 @@
 
         async function loadAdminPanel() {
             try {
-                const data = await apiRequest('/adminpanel');
+                const data = await apiRequest('/api/adminpanel');
                 if (!data) return;
                 document.getElementById('statUsers').textContent = data.stats.total_users || 0;
                 document.getElementById('statSuspended').textContent = data.stats.suspended_users || 0;
@@ -367,7 +308,7 @@
 
         async function loadUsers() {
             try {
-                const data = await apiRequest('/adminpanel/users');
+                const data = await apiRequest('/api/adminpanel/users');
                 if (!data) return;
                 const container = document.getElementById('usersTableContainer');
 
@@ -410,7 +351,7 @@
 
         async function loadAppeals() {
             try {
-                const data = await apiRequest('/adminpanel/appeals');
+                const data = await apiRequest('/api/adminpanel/appeals');
                 if (!data) return;
                 const container = document.getElementById('appealsTableContainer');
 
@@ -499,7 +440,6 @@
             if (!confirm(`Are you sure you want to suspend user ${userId}?`)) return;
 
             try {
-                // This would require a suspend endpoint - for now, use the chat suspension or direct DB
                 showToast('Suspension feature: Use MongoDB or implement /admin/suspend endpoint', 'error');
             } catch (error) {
                 showToast('Error: ' + error.message, 'error');
@@ -544,7 +484,6 @@
             window.location.href = '/platform';
         }
 
-        // Check auth and load
         async function init() {
             if (!authToken) {
                 window.location.href = '/platform';
