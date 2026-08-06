@@ -572,12 +572,12 @@ async def auth_logout():
 # ============================================
 
 @app.post("/keys/generate", response_model=CreateKeyResponse)
-@rate_limit(limit_per_minute=1)
 async def generate_api_key(
     request: Request,
     create_request: CreateKeyRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
+    """Generate a new API key - Rate limited by middleware"""
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -719,7 +719,6 @@ async def get_usage_stats(auth: dict = Depends(require_api_key_or_oauth)):
 # ============================================
 
 @app.post("/chat", response_model=ChatResponse)
-@rate_limit(limit_per_minute=10)
 async def chat(
     request: Request,
     chat_request: ChatRequest,
@@ -886,7 +885,6 @@ This decision can be reviewed by our support team."""
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/public")
-@rate_limit(limit_per_minute=5)
 async def chat_public(request: Request, chat_request: ChatRequest):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
@@ -974,7 +972,6 @@ async def get_current_mode(auth: dict = Depends(require_api_key_or_oauth)):
 # ============================================
 
 @app.post("/upload")
-@rate_limit(limit_per_minute=5)
 async def upload_document(
     request: Request,
     file: UploadFile = File(...),
@@ -1026,12 +1023,46 @@ async def upload_document(
         logger.error(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/add-text")
+async def add_text(
+    text: str,
+    metadata: Optional[Dict] = None,
+    auth: dict = Depends(require_api_key_or_oauth)
+):
+    if not rag_engine:
+        raise HTTPException(status_code=400, detail="RAG engine not available")
+    
+    is_illegal, severity, patterns = detect_illegal_activity(text)
+    if is_illegal and severity in ["critical", "high"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"🚫 Content rejected. Illegal activity detected: {', '.join(patterns)}"
+        )
+    
+    if contains_profanity(text):
+        raise HTTPException(
+            status_code=400, 
+            detail="❌ Your text contains inappropriate language. Please keep the content professional."
+        )
+    
+    user_id = auth.get("user_id") or auth.get("sub")
+    
+    try:
+        num_chunks = rag_engine.add_text(text, metadata or {"user_id": user_id})
+        return {
+            "status": "success",
+            "chunks_processed": num_chunks,
+            "message": f"Added {num_chunks} chunks to knowledge base"
+        }
+    except Exception as e:
+        logger.error(f"Add text error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ============================================
 # QUIZ ENDPOINTS
 # ============================================
 
 @app.post("/quiz")
-@rate_limit(limit_per_minute=5)
 async def generate_quiz(
     request: Request,
     quiz_request: QuizRequest,
