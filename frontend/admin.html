@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vostud AI - Admin Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0c29;
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .header h1 {
+            font-size: 2em;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+            font-size: 0.9em;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        .btn-danger {
+            background: rgba(248, 113, 113, 0.2);
+            color: #f87171;
+            border: 1px solid rgba(248, 113, 113, 0.3);
+        }
+        .btn-success {
+            background: rgba(74, 222, 128, 0.2);
+            color: #4ade80;
+            border: 1px solid rgba(74, 222, 128, 0.3);
+        }
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+            text-align: center;
+        }
+        .stat-card .number {
+            font-size: 2.5em;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat-card .label {
+            color: #aaa;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .card h3 {
+            margin-bottom: 15px;
+            color: #ddd;
+        }
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 10px;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            background: transparent;
+            border: none;
+            color: #aaa;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+        .tab:hover {
+            background: rgba(255,255,255,0.05);
+        }
+        .tab.active {
+            background: rgba(102,126,234,0.2);
+            color: #667eea;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        th {
+            color: #888;
+            font-weight: 600;
+            font-size: 0.8em;
+            text-transform: uppercase;
+        }
+        tr:hover {
+            background: rgba(255,255,255,0.03);
+        }
+        .badge {
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            font-weight: 600;
+        }
+        .badge-admin { background: rgba(102,126,234,0.2); color: #667eea; }
+        .badge-free { background: rgba(74,222,128,0.2); color: #4ade80; }
+        .badge-suspended { background: rgba(248,113,113,0.2); color: #f87171; }
+        .badge-pending { background: rgba(251,191,36,0.2); color: #fbbf24; }
+        .badge-approved { background: rgba(74,222,128,0.2); color: #4ade80; }
+        .badge-denied { background: rgba(248,113,113,0.2); color: #f87171; }
+        .badge-critical { background: rgba(248,113,113,0.3); color: #f87171; }
+        .badge-high { background: rgba(251,191,36,0.3); color: #fbbf24; }
+        .badge-medium { background: rgba(96,165,250,0.3); color: #60a5fa; }
+        .badge-low { background: rgba(74,222,128,0.3); color: #4ade80; }
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            padding: 15px 25px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.9);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: none;
+            z-index: 1000;
+            max-width: 400px;
+        }
+        .toast.show { display: block; animation: slideUp 0.3s ease; }
+        .toast.success { border-color: rgba(74,222,128,0.3); }
+        .toast.error { border-color: rgba(248,113,113,0.3); }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .loading { text-align: center; color: #666; padding: 40px; }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .flex { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        input, select, textarea {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            font-size: 0.9em;
+        }
+        input:focus, select:focus { outline: none; border-color: #667eea; }
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .header { flex-direction: column; align-items: flex-start; }
+            table { font-size: 0.75em; }
+            th, td { padding: 8px 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🛡️ Vostud AI Admin Panel</h1>
+            <div class="header-actions">
+                <span id="adminUser" style="color: #888; font-size: 0.9em;"></span>
+                <button class="btn btn-secondary" onclick="logout()">Logout</button>
+                <a href="/platform" class="btn btn-secondary">Dashboard</a>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card"><div class="number" id="statUsers">0</div><div class="label">Total Users</div></div>
+            <div class="stat-card"><div class="number" id="statSuspended">0</div><div class="label">Suspended</div></div>
+            <div class="stat-card"><div class="number" id="statAppeals">0</div><div class="label">Pending Appeals</div></div>
+            <div class="stat-card"><div class="number" id="statKeys">0</div><div class="label">API Keys</div></div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-tab="users" onclick="switchTab('users')">👥 Users</button>
+            <button class="tab" data-tab="appeals" onclick="switchTab('appeals')">📝 Appeals</button>
+            <button class="tab" data-tab="reports" onclick="switchTab('reports')">🚨 Reports</button>
+        </div>
+
+        <!-- Tab: Users -->
+        <div class="tab-content active" id="tab-users">
+            <div class="card">
+                <div class="flex" style="margin-bottom: 15px;">
+                    <h3 style="margin: 0;">All Users</h3>
+                    <button class="btn btn-secondary" onclick="loadUsers()">🔄 Refresh</button>
+                    <button class="btn btn-danger" onclick="suspendUser()">⛔ Suspend User</button>
+                    <button class="btn btn-success" onclick="unsuspendUser()">✅ Unsuspend</button>
+                </div>
+                <div id="usersTableContainer"><div class="loading">Loading users...</div></div>
+            </div>
+        </div>
+
+        <!-- Tab: Appeals -->
+        <div class="tab-content" id="tab-appeals">
+            <div class="card">
+                <div class="flex" style="margin-bottom: 15px;">
+                    <h3 style="margin: 0;">Suspension Appeals</h3>
+                    <button class="btn btn-secondary" onclick="loadAppeals()">🔄 Refresh</button>
+                </div>
+                <div id="appealsTableContainer"><div class="loading">Loading appeals...</div></div>
+            </div>
+        </div>
+
+        <!-- Tab: Reports -->
+        <div class="tab-content" id="tab-reports">
+            <div class="card">
+                <div class="flex" style="margin-bottom: 15px;">
+                    <h3 style="margin: 0;">Illegal Activity Reports</h3>
+                    <button class="btn btn-secondary" onclick="loadReports()">🔄 Refresh</button>
+                    <select id="reportFilter" onchange="loadReports()">
+                        <option value="">All Severities</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+                <div id="reportsTableContainer"><div class="loading">Loading reports...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ?
+            'http://localhost:8000' : 'https://vostud-ai.onrender.com';
+        let authToken = localStorage.getItem('vostud_api_key');
+        let currentUser = null;
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast show ${type}`;
+            clearTimeout(toast._timeout);
+            toast._timeout = setTimeout(() => { toast.classList.remove('show'); }, 4000);
+        }
+
+        async function apiRequest(endpoint, method = 'GET', body = null) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (authToken) headers['X-API-Key'] = authToken;
+
+            const options = { method, headers };
+            if (body) options.body = JSON.stringify(body);
+
+            const response = await fetch(`${API_URL}${endpoint}`, options);
+
+            if (response.status === 401) {
+                showToast('Session expired. Please login again.', 'error');
+                localStorage.removeItem('vostud_api_key');
+                window.location.href = '/platform';
+                return null;
+            }
+
+            if (response.status === 403) {
+                showToast('Admin access required.', 'error');
+                return null;
+            }
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.detail || data.message || 'Request failed');
+            }
+
+            return response.json();
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+            document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            if (tabName === 'users') loadUsers();
+            if (tabName === 'appeals') loadAppeals();
+            if (tabName === 'reports') loadReports();
+        }
+
+        async function loadAdminPanel() {
+            try {
+                const data = await apiRequest('/adminpanel');
+                if (!data) return;
+                document.getElementById('statUsers').textContent = data.stats.total_users || 0;
+                document.getElementById('statSuspended').textContent = data.stats.suspended_users || 0;
+                document.getElementById('statAppeals').textContent = data.stats.pending_appeals || 0;
+                document.getElementById('statKeys').textContent = data.stats.total_api_keys || 0;
+                document.getElementById('adminUser').textContent = `👤 ${data.status}`;
+            } catch (error) {
+                showToast('Failed to load admin panel: ' + error.message, 'error');
+            }
+        }
+
+        async function loadUsers() {
+            try {
+                const data = await apiRequest('/adminpanel/users');
+                if (!data) return;
+                const container = document.getElementById('usersTableContainer');
+
+                if (!data.users || data.users.length === 0) {
+                    container.innerHTML = '<div style="color: #666; padding: 20px; text-align: center;">No users found.</div>';
+                    return;
+                }
+
+                container.innerHTML = `
+                    <table>
+                        <thead><tr>
+                            <th>ID</th>
+                            <th>Email</th>
+                            <th>Tier</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr></thead>
+                        <tbody>
+                            ${data.users.map(u => `
+                                <tr>
+                                    <td style="font-size: 0.8em; color: #888;">${u._id.slice(-8)}</td>
+                                    <td>${u.email || 'N/A'}</td>
+                                    <td><span class="badge ${u.tier === 'admin' ? 'badge-admin' : 'badge-free'}">${u.tier || 'free'}</span></td>
+                                    <td>${u.suspension_status === 'suspended' ? '<span class="badge badge-suspended">⛔ Suspended</span>' : '<span style="color: #4ade80;">✅ Active</span>'}</td>
+                                    <td>
+                                        ${u.suspension_status === 'suspended' ?
+                                            `<button class="btn btn-success" style="padding: 4px 12px; font-size: 0.8em;" onclick="unsuspendUser('${u._id}')">Unsuspend</button>` :
+                                            `<button class="btn btn-danger" style="padding: 4px 12px; font-size: 0.8em;" onclick="suspendUser('${u._id}')">Suspend</button>`
+                                        }
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                document.getElementById('usersTableContainer').innerHTML = `<div style="color: #f87171; padding: 20px;">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function loadAppeals() {
+            try {
+                const data = await apiRequest('/adminpanel/appeals');
+                if (!data) return;
+                const container = document.getElementById('appealsTableContainer');
+
+                if (!data.appeals || data.appeals.length === 0) {
+                    container.innerHTML = '<div style="color: #666; padding: 20px; text-align: center;">No appeals found.</div>';
+                    return;
+                }
+
+                container.innerHTML = `
+                    <table>
+                        <thead><tr>
+                            <th>User ID</th>
+                            <th>Message</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr></thead>
+                        <tbody>
+                            ${data.appeals.map(a => `
+                                <tr>
+                                    <td style="font-size: 0.8em; color: #888;">${a.user_id.slice(-8)}</td>
+                                    <td>${(a.message || '').slice(0, 100)}...</td>
+                                    <td><span class="badge ${a.status === 'pending' ? 'badge-pending' : a.status === 'approved' ? 'badge-approved' : 'badge-denied'}">${a.status || 'pending'}</span></td>
+                                    <td>${new Date(a.created_at).toLocaleDateString()}</td>
+                                    <td>
+                                        ${a.status === 'pending' ? `
+                                            <button class="btn btn-success" style="padding: 4px 12px; font-size: 0.8em;" onclick="resolveAppeal('${a._id}', true)">Approve</button>
+                                            <button class="btn btn-danger" style="padding: 4px 12px; font-size: 0.8em;" onclick="resolveAppeal('${a._id}', false)">Deny</button>
+                                        ` : `<span style="color: #888;">Resolved</span>`}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                document.getElementById('appealsTableContainer').innerHTML = `<div style="color: #f87171; padding: 20px;">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function loadReports() {
+            try {
+                const filter = document.getElementById('reportFilter').value;
+                const endpoint = filter ? `/admin/illegal-activity?severity=${filter}` : '/admin/illegal-activity';
+                const data = await apiRequest(endpoint);
+                if (!data) return;
+                const container = document.getElementById('reportsTableContainer');
+
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<div style="color: #666; padding: 20px; text-align: center;">No reports found.</div>';
+                    return;
+                }
+
+                container.innerHTML = `
+                    <table>
+                        <thead><tr>
+                            <th>User</th>
+                            <th>Severity</th>
+                            <th>Patterns</th>
+                            <th>Message</th>
+                            <th>Time</th>
+                        </tr></thead>
+                        <tbody>
+                            ${data.map(r => `
+                                <tr>
+                                    <td style="font-size: 0.8em; color: #888;">${r.user_id?.slice(-8) || 'N/A'}</td>
+                                    <td><span class="badge badge-${r.severity || 'low'}">${r.severity || 'low'}</span></td>
+                                    <td>${(r.patterns || []).join(', ')}</td>
+                                    <td style="font-size: 0.85em;">${(r.message || '').slice(0, 80)}...</td>
+                                    <td style="font-size: 0.8em; color: #888;">${new Date(r.timestamp).toLocaleString()}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                document.getElementById('reportsTableContainer').innerHTML = `<div style="color: #f87171; padding: 20px;">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function suspendUser(userId) {
+            if (!userId) {
+                userId = prompt('Enter user ID to suspend:');
+                if (!userId) return;
+            }
+            if (!confirm(`Are you sure you want to suspend user ${userId}?`)) return;
+
+            try {
+                // This would require a suspend endpoint - for now, use the chat suspension or direct DB
+                showToast('Suspension feature: Use MongoDB or implement /admin/suspend endpoint', 'error');
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function unsuspendUser(userId) {
+            if (!userId) {
+                userId = prompt('Enter user ID to unsuspend:');
+                if (!userId) return;
+            }
+            if (!confirm(`Unsuspend user ${userId}?`)) return;
+
+            try {
+                const result = await apiRequest(`/admin/unsuspend/${userId}`, 'POST');
+                showToast(result.message || 'User unsuspended successfully!', 'success');
+                loadUsers();
+                loadAdminPanel();
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function resolveAppeal(appealId, approved) {
+            if (!confirm(`Resolve appeal ${appealId} as ${approved ? 'APPROVED' : 'DENIED'}?`)) return;
+
+            try {
+                const result = await apiRequest(`/admin/appeal/${appealId}/resolve`, 'POST', {
+                    approved: approved,
+                    admin_notes: approved ? 'Appeal approved by admin' : 'Appeal denied by admin'
+                });
+                showToast(result.message || 'Appeal resolved!', 'success');
+                loadAppeals();
+                loadAdminPanel();
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('vostud_api_key');
+            window.location.href = '/platform';
+        }
+
+        // Check auth and load
+        async function init() {
+            if (!authToken) {
+                window.location.href = '/platform';
+                return;
+            }
+
+            try {
+                const user = await apiRequest('/auth/me');
+                if (!user) return;
+                currentUser = user.user;
+
+                if (currentUser?.tier !== 'admin') {
+                    showToast('Admin access required.', 'error');
+                    setTimeout(() => window.location.href = '/platform', 1500);
+                    return;
+                }
+
+                await loadAdminPanel();
+                await loadUsers();
+                await loadAppeals();
+                await loadReports();
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
