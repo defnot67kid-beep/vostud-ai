@@ -95,14 +95,7 @@ from app.oauth import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from authlib.integrations.starlette_client import OAuthError
-from app.rate_limiter import limiter, token_tracker, RateLimitMiddleware, TIER_LIMITS
-from slowapi.errors import RateLimitExceeded
-from slowapi import _rate_limit_exceeded_handler
-
-# ============================================
-# SETUP RATE LIMITER
-# ============================================
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+from app.rate_limiter import rate_limit, token_tracker, RateLimitMiddleware, TIER_LIMITS
 
 # ============================================
 # SETUP OAUTH
@@ -151,18 +144,11 @@ app.add_middleware(RateLimitMiddleware, db=db, token_tracker=token_tracker)
 # ============================================
 
 ILLEGAL_ACTIVITY_PATTERNS = {
-    # Hacking/Exploits
     "sql_injection": r'\b(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|EXEC|EXECUTE)\b.*?\b(?:FROM|INTO|TABLE|DATABASE)\b',
     "xss": r'<script.*?>.*?</script>',
     "eval": r'\b(?:eval|exec|system|shell_exec|passthru|popen|proc_open)\s*\(',
-    
-    # Malware/Viruses
     "malware": r'\b(?:virus|malware|trojan|ransomware|keylogger|rootkit|worm)\b',
-    
-    # Exploitation
     "exploit": r'\b(?:exploit|vulnerability|backdoor|shellcode|buffer.?overflow|zero.?day)\b',
-    
-    # Illegal Activities
     "drugs": r'\b(?:cocaine|heroin|meth|ecstasy|lsd|marijuana|cannabis|drug|trafficking)\b',
     "weapons": r'\b(?:gun|firearm|explosive|bomb|ammunition|weapon|knife|sword)\b',
     "fraud": r'\b(?:fraud|scam|phishing|identity.?theft|credit.?card|stolen|hack|crack)\b',
@@ -180,7 +166,6 @@ SEVERITY_LEVELS = {
 }
 
 def detect_illegal_activity(text: str) -> tuple:
-    """Detect illegal activity in text. Returns (is_illegal, severity, detected_patterns)"""
     if not text:
         return False, None, []
     
@@ -207,7 +192,6 @@ def detect_illegal_activity(text: str) -> tuple:
     return False, None, []
 
 def generate_illegal_activity_report(user_id: str, email: str, message: str, severity: str, patterns: list) -> dict:
-    """Generate a report for illegal activity"""
     return {
         "user_id": user_id,
         "email": email,
@@ -392,7 +376,6 @@ class CreateKeyResponse(BaseModel):
 class ModeSwitchRequest(BaseModel):
     mode: str
 
-# Support Models
 class SupportTicketRequest(BaseModel):
     subject: str
     message: str
@@ -589,7 +572,7 @@ async def auth_logout():
 # ============================================
 
 @app.post("/keys/generate", response_model=CreateKeyResponse)
-@limiter.limit("5 per hour")
+@rate_limit(limit_per_minute=1)
 async def generate_api_key(
     request: Request,
     create_request: CreateKeyRequest,
@@ -709,7 +692,6 @@ async def revoke_api_key(key_prefix: str, auth: dict = Depends(require_api_key_o
 
 @app.get("/keys/stats")
 async def get_usage_stats(auth: dict = Depends(require_api_key_or_oauth)):
-    """Get usage statistics for the user"""
     try:
         if not db:
             return {"total_requests": 0, "last_24h": 0, "total_keys": 0, "active_keys": 0, "total_tokens": 0}
@@ -737,7 +719,7 @@ async def get_usage_stats(auth: dict = Depends(require_api_key_or_oauth)):
 # ============================================
 
 @app.post("/chat", response_model=ChatResponse)
-@limiter.limit("10 per 10 minutes")
+@rate_limit(limit_per_minute=10)
 async def chat(
     request: Request,
     chat_request: ChatRequest,
@@ -746,9 +728,6 @@ async def chat(
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
-    # ============================================
-    # CHECK FOR ILLEGAL ACTIVITY
-    # ============================================
     is_illegal, severity, patterns = detect_illegal_activity(chat_request.message)
     
     if is_illegal and severity in ["critical", "high"]:
@@ -756,7 +735,6 @@ async def chat(
         email = auth.get("email", "unknown")
         api_key = request.headers.get("X-API-Key")
         
-        # Generate report
         report = generate_illegal_activity_report(
             user_id=user_id,
             email=email,
@@ -767,12 +745,8 @@ async def chat(
         
         if db:
             db.illegal_activity_logs.insert_one(report)
-            
-            # Suspend the user
             reason = f"🚫 Illegal activity detected: {', '.join(patterns)}"
             db.suspend_user(user_id, reason, severity, patterns)
-            
-            # Create automated support ticket
             db.create_support_ticket(
                 user_id=user_id,
                 subject=f"Account Suspension - {severity.upper()} Severity",
@@ -826,14 +800,12 @@ Reason: {', '.join(patterns)}
 This decision can be reviewed by our support team."""
             )
     
-    # Check for profanity
     if contains_profanity(chat_request.message):
         raise HTTPException(
             status_code=400, 
             detail="❌ Your message contains inappropriate language. Please keep the conversation professional."
         )
     
-    # Validate model
     model_to_use = chat_request.model
     
     if not model_to_use:
@@ -914,12 +886,11 @@ This decision can be reviewed by our support team."""
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/public")
-@limiter.limit("5 per minute")
+@rate_limit(limit_per_minute=5)
 async def chat_public(request: Request, chat_request: ChatRequest):
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
-    # Check for illegal activity in public chat
     is_illegal, severity, patterns = detect_illegal_activity(chat_request.message)
     if is_illegal and severity in ["critical", "high"]:
         raise HTTPException(
@@ -951,62 +922,6 @@ async def chat_public(request: Request, chat_request: ChatRequest):
         return {"response": response}
     except Exception as e:
         logger.error(f"Public chat error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/chat/sources")
-@limiter.limit("10 per hour")
-async def get_sources_only(
-    request: Request,
-    chat_request: ChatRequest,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    if not chat_engine:
-        raise HTTPException(status_code=503, detail="Chat engine not available")
-    
-    # Check for illegal activity
-    is_illegal, severity, patterns = detect_illegal_activity(chat_request.message)
-    if is_illegal and severity in ["critical", "high"]:
-        raise HTTPException(
-            status_code=403,
-            detail=f"🚫 Access denied. Illegal activity detected: {', '.join(patterns)}"
-        )
-    
-    if contains_profanity(chat_request.message):
-        raise HTTPException(
-            status_code=400, 
-            detail="❌ Your message contains inappropriate language. Please keep the conversation professional."
-        )
-    
-    model_to_use = chat_request.model or "auto"
-    is_valid, error_message, actual_model = validate_model(model_to_use)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=error_message)
-    
-    if actual_model == "auto":
-        actual_model = None
-    
-    try:
-        response = chat_engine.generate_response(
-            user_message=chat_request.message,
-            conversation_history=chat_request.history,
-            use_rag=chat_request.use_rag,
-            model_override=actual_model
-        )
-        
-        import re
-        sources = re.findall(r'\[Source:[^\]]*\]', response)
-        
-        if not sources:
-            sources_section = re.search(r'Sources?:?\s*\n?([\s\S]*?)(?=\n\n|$)', response)
-            if sources_section:
-                return {
-                    "sources": [s.strip() for s in sources_section.group(1).split('\n') if s.strip()],
-                    "topic": chat_request.message[:50] + "..."
-                }
-        
-        unique_sources = list(dict.fromkeys(sources))
-        return {"sources": unique_sources, "topic": chat_request.message[:50] + "..."}
-    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================
@@ -1059,7 +974,7 @@ async def get_current_mode(auth: dict = Depends(require_api_key_or_oauth)):
 # ============================================
 
 @app.post("/upload")
-@limiter.limit("20 per hour")
+@rate_limit(limit_per_minute=5)
 async def upload_document(
     request: Request,
     file: UploadFile = File(...),
@@ -1074,7 +989,6 @@ async def upload_document(
     
     user_id = auth.get("user_id") or auth.get("sub")
     
-    # Check uploaded file content for illegal activity (for text files)
     if file_ext == '.txt':
         try:
             content = await file.read()
@@ -1112,48 +1026,12 @@ async def upload_document(
         logger.error(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/add-text")
-async def add_text(
-    text: str,
-    metadata: Optional[Dict] = None,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    if not rag_engine:
-        raise HTTPException(status_code=400, detail="RAG engine not available")
-    
-    # Check for illegal activity
-    is_illegal, severity, patterns = detect_illegal_activity(text)
-    if is_illegal and severity in ["critical", "high"]:
-        raise HTTPException(
-            status_code=403,
-            detail=f"🚫 Content rejected. Illegal activity detected: {', '.join(patterns)}"
-        )
-    
-    if contains_profanity(text):
-        raise HTTPException(
-            status_code=400, 
-            detail="❌ Your text contains inappropriate language. Please keep the content professional."
-        )
-    
-    user_id = auth.get("user_id") or auth.get("sub")
-    
-    try:
-        num_chunks = rag_engine.add_text(text, metadata or {"user_id": user_id})
-        return {
-            "status": "success",
-            "chunks_processed": num_chunks,
-            "message": f"Added {num_chunks} chunks to knowledge base"
-        }
-    except Exception as e:
-        logger.error(f"Add text error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 # ============================================
 # QUIZ ENDPOINTS
 # ============================================
 
 @app.post("/quiz")
-@limiter.limit("10 per hour")
+@rate_limit(limit_per_minute=5)
 async def generate_quiz(
     request: Request,
     quiz_request: QuizRequest,
@@ -1162,7 +1040,6 @@ async def generate_quiz(
     if not chat_engine:
         raise HTTPException(status_code=503, detail="Chat engine not available")
     
-    # Check for illegal activity in topic
     is_illegal, severity, patterns = detect_illegal_activity(quiz_request.topic)
     if is_illegal and severity in ["critical", "high"]:
         raise HTTPException(
@@ -1296,7 +1173,6 @@ async def get_analytics_details(
 
 @app.get("/usage")
 async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
-    """Get token usage for the user"""
     user_id = auth.get("user_id") or auth.get("sub")
     if not user_id:
         raise HTTPException(status_code=400, detail="User ID not found")
@@ -1373,7 +1249,6 @@ async def create_support_ticket(
     request: SupportTicketRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Create a support ticket (requires authentication)"""
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     
@@ -1400,11 +1275,9 @@ async def create_support_ticket(
 async def public_appeal(
     request: PublicAppealRequest
 ):
-    """Public appeal endpoint for suspended users without API key"""
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     
-    # Find user by email or user_id
     user = None
     if request.user_id:
         from bson import ObjectId
@@ -1419,11 +1292,9 @@ async def public_appeal(
     if not user:
         raise HTTPException(status_code=404, detail="User not found. Please provide a valid email or user_id.")
     
-    # Check if user is suspended
     if user.get("suspension_status") != "suspended":
         raise HTTPException(status_code=400, detail="Your account is not currently suspended.")
     
-    # Create appeal
     appeal_id = db.create_appeal(str(user["_id"]), request.message)
     if not appeal_id:
         raise HTTPException(status_code=500, detail="Failed to create appeal")
@@ -1441,7 +1312,6 @@ async def add_ticket_message(
     request: TicketMessageRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Add a message to a support ticket"""
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     
@@ -1459,7 +1329,6 @@ async def add_ticket_message(
 async def get_user_tickets(
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Get all support tickets for the user"""
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     
@@ -1480,7 +1349,6 @@ async def get_ticket_details(
     ticket_id: str,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Get details of a specific ticket"""
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     
@@ -1505,7 +1373,6 @@ async def create_appeal(
     request: AppealRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Create a suspension appeal (requires authentication)"""
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     
@@ -1513,7 +1380,6 @@ async def create_appeal(
     if not user_id:
         raise HTTPException(status_code=400, detail="User ID not found")
     
-    # Check if user is suspended
     user = db.users.find_one({"_id": user_id})
     if not user or user.get("suspension_status") != "suspended":
         raise HTTPException(status_code=400, detail="Your account is not suspended")
@@ -1531,7 +1397,6 @@ async def create_appeal(
 async def get_appeal_status(
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Get the status of a user's appeal"""
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     
@@ -1550,26 +1415,6 @@ async def get_appeal_status(
     appeal["_id"] = str(appeal["_id"])
     return appeal
 
-@app.post("/support/appeal/{appeal_id}/message")
-async def add_appeal_message(
-    appeal_id: str,
-    request: TicketMessageRequest,
-    auth: dict = Depends(require_api_key_or_oauth)
-):
-    """Add a message to an appeal"""
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-    
-    user_id = auth.get("user_id") or auth.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
-    
-    success = db.add_appeal_message(appeal_id, request.message, from_user=True)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to add message")
-    
-    return {"message": "Message added to appeal"}
-
 # ============================================
 # ADMIN ENDPOINTS
 # ============================================
@@ -1578,7 +1423,6 @@ async def add_appeal_message(
 async def get_suspended_users(
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Get all suspended users (admin only)"""
     if auth.get("tier") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -1597,7 +1441,6 @@ async def admin_unsuspend_user(
     user_id: str,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Unsuspend a user (admin only)"""
     if auth.get("tier") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -1619,7 +1462,6 @@ async def admin_unsuspend_user(
 async def get_pending_appeals(
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Get all pending appeals (admin only)"""
     if auth.get("tier") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -1639,7 +1481,6 @@ async def resolve_appeal(
     request: AdminAppealRequest,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Resolve an appeal (admin only)"""
     if auth.get("tier") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -1671,7 +1512,6 @@ async def get_illegal_activity(
     severity: Optional[str] = None,
     auth: dict = Depends(require_api_key_or_oauth)
 ):
-    """Get illegal activity reports (admin only)"""
     if auth.get("tier") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
