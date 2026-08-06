@@ -1,19 +1,13 @@
 """
-Vostud AI - Rate Limiting & Token Usage System
-Protects API endpoints from excessive usage
+Vostud AI - Simple Rate Limiting & Token Usage System
 """
 
 import time
-import json
 import hashlib
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
-from collections import defaultdict
 from fastapi import Request, HTTPException
-from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,6 +43,15 @@ TIER_LIMITS = {
         "tokens_per_month": 1000000,
         "concurrent_requests": 25,
         "chat_per_minute": 60
+    },
+    "admin": {
+        "requests_per_minute": 100,
+        "requests_per_10min": 200,
+        "requests_per_hour": 1000,
+        "requests_per_day": 10000,
+        "tokens_per_month": 5000000,
+        "concurrent_requests": 50,
+        "chat_per_minute": 100
     }
 }
 
@@ -77,6 +80,64 @@ EXCLUDED_PATHS = [
     "/index.html",
     "/static"
 ]
+
+# ============================================
+# SIMPLE RATE LIMITER
+# ============================================
+
+# In-memory request tracking
+_request_counts = defaultdict(list)
+
+def rate_limit(limit_per_minute: int = 10, key_func=None):
+    """
+    Simple rate limit decorator
+    
+    Usage:
+        @rate_limit(limit_per_minute=10)
+        async def my_endpoint(request: Request):
+            ...
+    """
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            # Get request from args or kwargs
+            request = None
+            for arg in args:
+                if isinstance(arg, Request):
+                    request = arg
+                    break
+            if not request and "request" in kwargs:
+                request = kwargs["request"]
+            
+            if request:
+                # Build rate limit key
+                client_ip = request.client.host if request.client else "unknown"
+                api_key = request.headers.get("X-API-Key")
+                
+                if api_key:
+                    # Use API key hash for rate limiting
+                    key = f"apikey:{hashlib.md5(api_key.encode()).hexdigest()[:10]}:{int(time.time() / 60)}"
+                else:
+                    key = f"ip:{client_ip}:{int(time.time() / 60)}"
+                
+                # Clean old entries (older than 60 seconds)
+                if key in _request_counts:
+                    _request_counts[key] = [t for t in _request_counts[key] if time.time() - t < 60]
+                else:
+                    _request_counts[key] = []
+                
+                # Check limit
+                if len(_request_counts[key]) >= limit_per_minute:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"Rate limit exceeded. Max {limit_per_minute} requests per minute."
+                    )
+                
+                # Add current request
+                _request_counts[key].append(time.time())
+            
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 # ============================================
 # TOKEN USAGE TRACKER
@@ -188,7 +249,6 @@ class TokenUsageTracker:
     async def check_limit(self, user_id: str, tier: str = "free") -> Tuple[bool, str]:
         """Check if user has exceeded their token limit"""
         try:
-            # Get usage from database directly
             if self.db:
                 cutoff_date = datetime.utcnow() - timedelta(days=30)
                 
@@ -208,25 +268,16 @@ class TokenUsageTracker:
                 
                 if result:
                     monthly_tokens = result[0].get("total_tokens", 0)
-                    daily_requests = result[0].get("total_requests", 0)
                 else:
                     monthly_tokens = 0
-                    daily_requests = 0
             else:
-                # Use cache fallback
                 usage = await self.get_usage(user_id, "month")
                 monthly_tokens = usage.get("tokens_used", 0)
-                daily_usage = await self.get_usage(user_id, "day")
-                daily_requests = daily_usage.get("requests", 0)
             
             monthly_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get("tokens_per_month", 50000)
-            daily_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get("requests_per_day", 200)
             
             if monthly_tokens >= monthly_limit:
                 return False, f"Monthly token limit exceeded ({monthly_limit} tokens). Upgrade your plan."
-            
-            if daily_requests >= daily_limit:
-                return False, f"Daily request limit exceeded ({daily_limit} requests per day)."
             
             return True, "OK"
             
@@ -235,15 +286,10 @@ class TokenUsageTracker:
             return True, "OK"
 
 # ============================================
-# RATE LIMITER SETUP
-# ============================================
-
-limiter = Limiter(key_func=get_remote_address, default_limits=["100 per hour"])
-token_tracker = TokenUsageTracker()
-
-# ============================================
 # RATE LIMIT MIDDLEWARE
 # ============================================
+
+token_tracker = TokenUsageTracker()
 
 class RateLimitMiddleware:
     """Custom middleware for rate limiting with path exclusions"""
@@ -252,9 +298,9 @@ class RateLimitMiddleware:
         self.app = app
         self.db = db
         self.token_tracker = token_tracker or TokenUsageTracker(db)
+        self.excluded_paths = EXCLUDED_PATHS
         self.request_counts = defaultdict(list)
         self.user_tiers = {}
-        self.excluded_paths = EXCLUDED_PATHS
     
     def _is_excluded_path(self, path: str) -> bool:
         if path in self.excluded_paths:
@@ -274,40 +320,30 @@ class RateLimitMiddleware:
         request = Request(scope, receive)
         path = request.url.path
         
+        # Skip rate limiting for excluded paths
         if self._is_excluded_path(path):
             await self.app(scope, receive, send)
             return
         
-        user_id = None
-        api_key = request.headers.get("X-API-Key")
-        if api_key and self.db:
-            try:
-                hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
-                key_doc = self.db.api_keys.find_one({"key": hashed_key})
-                if key_doc:
-                    user_id = key_doc.get("user_id")
-                    user = self.db.users.find_one({"_id": user_id})
-                    if user:
-                        tier = user.get("tier", "free")
-                        self.user_tiers[user_id] = tier
-            except Exception as e:
-                logger.error(f"Rate limit user lookup error: {e}")
-        
-        if not user_id:
-            user_id = get_remote_address(request)
-            self.user_tiers[user_id] = "free"
-        
-        request.state.user_id = user_id
-        request.state.rate_key = user_id
-        request.state.tier = self.user_tiers.get(user_id, "free")
-        
-        tier = self.user_tiers.get(user_id, "free")
+        # Get user tier from request state
+        tier = getattr(request.state, "tier", "free")
         limits = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
         
-        minute_key = f"{user_id}:{int(time.time() / 60)}"
+        # Get rate limit key
+        api_key = request.headers.get("X-API-Key")
+        if api_key:
+            key = f"apikey:{hashlib.md5(api_key.encode()).hexdigest()[:10]}"
+        else:
+            client_ip = request.client.host if request.client else "unknown"
+            key = f"ip:{client_ip}"
+        
+        minute_key = f"{key}:{int(time.time() / 60)}"
+        
+        # Clean old entries
         if minute_key in self.request_counts:
             self.request_counts[minute_key] = [t for t in self.request_counts[minute_key] if time.time() - t < 60]
             if len(self.request_counts[minute_key]) >= limits.get("chat_per_minute", 10):
+                from fastapi.responses import JSONResponse
                 response = JSONResponse(
                     status_code=429,
                     content={"detail": f"Rate limit exceeded. Max {limits['chat_per_minute']} requests per minute."}
