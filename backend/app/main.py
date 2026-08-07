@@ -403,7 +403,6 @@ class PublicAppealRequest(BaseModel):
 @app.get("/")
 @app.head("/")
 async def root():
-    """Serve the main index.html"""
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
@@ -419,7 +418,6 @@ async def root():
 @app.get("/platform")
 @app.head("/platform")
 async def serve_platform():
-    """Serve the platform dashboard"""
     platform_path = os.path.join(FRONTEND_DIR, "platform.html")
     if os.path.exists(platform_path):
         return FileResponse(platform_path)
@@ -428,7 +426,6 @@ async def serve_platform():
 @app.get("/adminpanel")
 @app.head("/adminpanel")
 async def serve_admin_panel():
-    """Serve the admin panel"""
     admin_path = os.path.join(FRONTEND_DIR, "admin.html")
     if os.path.exists(admin_path):
         return FileResponse(admin_path)
@@ -437,7 +434,6 @@ async def serve_admin_panel():
 @app.get("/support")
 @app.head("/support")
 async def serve_support_dashboard():
-    """Serve the support dashboard"""
     support_path = os.path.join(FRONTEND_DIR, "support.html")
     if os.path.exists(support_path):
         return FileResponse(support_path)
@@ -456,7 +452,6 @@ async def serve_index():
 
 @app.get("/api/adminpanel")
 async def admin_panel(auth: dict = Depends(require_api_key_or_oauth)):
-    """Admin panel dashboard API"""
     if auth.get("tier") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -480,9 +475,7 @@ async def admin_panel(auth: dict = Depends(require_api_key_or_oauth)):
     }
 
 @app.get("/api/adminpanel/users")
-async def admin_users(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
+async def admin_users(auth: dict = Depends(require_api_key_or_oauth)):
     if auth.get("tier") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -497,9 +490,7 @@ async def admin_users(
     return {"users": users}
 
 @app.get("/api/adminpanel/reports")
-async def admin_reports(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
+async def admin_reports(auth: dict = Depends(require_api_key_or_oauth)):
     if auth.get("tier") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -514,9 +505,7 @@ async def admin_reports(
     return {"reports": reports}
 
 @app.get("/api/adminpanel/appeals")
-async def admin_appeals(
-    auth: dict = Depends(require_api_key_or_oauth)
-):
+async def admin_appeals(auth: dict = Depends(require_api_key_or_oauth)):
     if auth.get("tier") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -531,7 +520,7 @@ async def admin_appeals(
     return {"appeals": appeals}
 
 # ============================================
-# SUPPORT API ROUTES
+# SUPPORT API ROUTES (FIXED - Works with OAuth Cookie)
 # ============================================
 
 @app.get("/api/support")
@@ -540,6 +529,8 @@ async def support_dashboard(auth: dict = Depends(require_api_key_or_oauth)):
         raise HTTPException(status_code=503, detail="Database not available")
     
     user_id = auth.get("user_id") or auth.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found")
     
     from bson import ObjectId
     tickets = list(db.support_tickets.find({"user_id": user_id}).sort("created_at", -1))
@@ -563,7 +554,7 @@ async def create_support_ticket(
     
     user_id = auth.get("user_id") or auth.get("sub")
     if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
+        raise HTTPException(status_code=401, detail="User ID not found")
     
     ticket_id = db.create_support_ticket(
         user_id=user_id,
@@ -591,7 +582,7 @@ async def add_ticket_message(
     
     user_id = auth.get("user_id") or auth.get("sub")
     if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
+        raise HTTPException(status_code=401, detail="User ID not found")
     
     success = db.add_ticket_message(ticket_id, request.message, from_user=True)
     if not success:
@@ -609,7 +600,7 @@ async def get_ticket_details(
     
     user_id = auth.get("user_id") or auth.get("sub")
     if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
+        raise HTTPException(status_code=401, detail="User ID not found")
     
     from bson import ObjectId
     ticket = db.support_tickets.find_one({
