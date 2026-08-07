@@ -43,43 +43,84 @@ TIER_LIMITS = {
         "tokens_per_month": 1000000,
         "concurrent_requests": 25,
         "chat_per_minute": 60
-    },
-    "admin": {
-        "requests_per_minute": 100,
-        "requests_per_10min": 200,
-        "requests_per_hour": 1000,
-        "requests_per_day": 10000,
-        "tokens_per_month": 5000000,
-        "concurrent_requests": 50,
-        "chat_per_minute": 100
     }
 }
 
+# ============================================
+# PATHS EXCLUDED FROM RATE LIMITING
+# ============================================
+
 EXCLUDED_PATHS = [
+    # Health & Auth
     "/health",
     "/auth/me",
     "/auth/logout",
+    "/oauth-check",
+    "/db-test",
+    "/debug/session",
+    
+    # API Keys
     "/keys",
     "/keys/stats",
     "/keys/generate",
+    
+    # Models
     "/models",
     "/models/switch",
     "/models/auto",
     "/models/next",
+    
+    # Stats
     "/knowledge-stats",
     "/analytics/stats",
     "/analytics/details",
     "/usage",
     "/usage/check",
     "/mode/current",
-    "/oauth-check",
-    "/db-test",
-    "/debug/session",
+    
+    # Frontend
     "/platform",
     "/",
     "/index.html",
-    "/static"
+    "/static",
+    "/logo",
+    
+    # ============================================
+    # ADMIN ENDPOINTS - NO RATE LIMITING!
+    # ============================================
+    "/adminpanel",
+    "/api/adminpanel",
+    "/api/adminpanel/users",
+    "/api/adminpanel/reports",
+    "/api/adminpanel/appeals",
+    "/admin/suspended-users",
+    "/admin/appeals",
+    "/admin/illegal-activity",
+    
+    # ============================================
+    # SUPPORT ENDPOINTS - NO RATE LIMITING!
+    # ============================================
+    "/support",
+    "/api/support",
+    "/api/support/ticket",
 ]
+
+def is_excluded_path(path: str) -> bool:
+    """Check if a path should be excluded from rate limiting"""
+    # Exact match
+    if path in EXCLUDED_PATHS:
+        return True
+    
+    # Check for wildcard matches (e.g., /api/support/ticket/*)
+    for excluded in EXCLUDED_PATHS:
+        if excluded.endswith("/*"):
+            prefix = excluded[:-2]
+            if path.startswith(prefix):
+                return True
+        if path.startswith(excluded + "/"):
+            return True
+    
+    return False
 
 # ============================================
 # SIMPLE RATE LIMITER
@@ -108,35 +149,35 @@ def rate_limit(limit_per_minute: int = 10):
                         break
             
             if request:
+                # Check if path should be excluded
+                path = request.url.path
+                if is_excluded_path(path):
+                    return await func(*args, **kwargs)
+                
                 # Build rate limit key
                 client_ip = request.client.host if request.client else "unknown"
                 api_key = request.headers.get("X-API-Key")
                 
                 if api_key:
-                    # Use API key hash for rate limiting
                     key = f"apikey:{hashlib.md5(api_key.encode()).hexdigest()[:10]}"
                 else:
                     key = f"ip:{client_ip}"
                 
                 minute_key = f"{key}:{int(time.time() / 60)}"
                 
-                # Clean old entries (older than 60 seconds)
                 if minute_key in _request_counts:
                     _request_counts[minute_key] = [t for t in _request_counts[minute_key] if time.time() - t < 60]
                 else:
                     _request_counts[minute_key] = []
                 
-                # Check limit
                 if len(_request_counts[minute_key]) >= limit_per_minute:
                     raise HTTPException(
                         status_code=429,
                         detail=f"Rate limit exceeded. Max {limit_per_minute} requests per minute."
                     )
                 
-                # Add current request
                 _request_counts[minute_key].append(time.time())
             
-            # Call the original function
             return await func(*args, **kwargs)
         return wrapper
     return decorator
@@ -163,7 +204,6 @@ class TokenUsageTracker:
         return (time.time() - self._cache_timestamps[key]) < self._cache_ttl
     
     async def get_usage(self, user_id: str, period: str = "month") -> dict:
-        """Get token usage for a user"""
         try:
             cache_key = self._get_cache_key(user_id, period)
             
@@ -221,7 +261,6 @@ class TokenUsageTracker:
             return {"tokens_used": 0, "requests": 0, "cost": 0.0}
     
     async def track_usage(self, user_id: str, tokens_used: int, model: str = "unknown", api: str = "unknown", cost: float = 0.0):
-        """Track token usage for a request"""
         try:
             cache_keys = [
                 self._get_cache_key(user_id, "day"),
@@ -249,7 +288,6 @@ class TokenUsageTracker:
             logger.error(f"❌ Track usage error: {e}")
     
     async def check_limit(self, user_id: str, tier: str = "free") -> Tuple[bool, str]:
-        """Check if user has exceeded their token limit"""
         try:
             if self.db:
                 cutoff_date = datetime.utcnow() - timedelta(days=30)
@@ -300,19 +338,8 @@ class RateLimitMiddleware:
         self.app = app
         self.db = db
         self.token_tracker = token_tracker or TokenUsageTracker(db)
-        self.excluded_paths = EXCLUDED_PATHS
         self.request_counts = defaultdict(list)
         self.user_tiers = {}
-    
-    def _is_excluded_path(self, path: str) -> bool:
-        if path in self.excluded_paths:
-            return True
-        
-        for excluded in self.excluded_paths:
-            if path.startswith(excluded + "/") or path.startswith(excluded + "?"):
-                return True
-        
-        return False
     
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -323,7 +350,7 @@ class RateLimitMiddleware:
         path = request.url.path
         
         # Skip rate limiting for excluded paths
-        if self._is_excluded_path(path):
+        if is_excluded_path(path):
             await self.app(scope, receive, send)
             return
         
@@ -341,7 +368,6 @@ class RateLimitMiddleware:
         
         minute_key = f"{key}:{int(time.time() / 60)}"
         
-        # Clean old entries
         if minute_key in self.request_counts:
             self.request_counts[minute_key] = [t for t in self.request_counts[minute_key] if time.time() - t < 60]
             if len(self.request_counts[minute_key]) >= limits.get("chat_per_minute", 10):
