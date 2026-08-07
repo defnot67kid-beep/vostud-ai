@@ -40,6 +40,17 @@
             gap: 15px;
         }
 
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .header-logo {
+            height: 50px;
+            width: auto;
+        }
+
         .header h1 {
             font-size: 2em;
             background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
@@ -793,6 +804,26 @@
             color: #f093fb;
         }
 
+        .btn-support {
+            background: rgba(74, 222, 128, 0.2);
+            border-color: #4ade80;
+            color: #4ade80;
+        }
+
+        .btn-support:hover {
+            background: rgba(74, 222, 128, 0.3);
+        }
+
+        .btn-admin {
+            background: rgba(248, 113, 113, 0.2);
+            border-color: #f87171;
+            color: #f87171;
+        }
+
+        .btn-admin:hover {
+            background: rgba(248, 113, 113, 0.3);
+        }
+
         @media (max-width: 768px) {
             .header {
                 flex-direction: column;
@@ -886,7 +917,10 @@
 
         <!-- ===== HEADER ===== -->
         <div class="header">
-            <h1>⚡ Vostud AI Platform</h1>
+            <div class="header-left">
+                <img src="/logo" alt="Vostud AI Logo" class="header-logo" onerror="this.style.display='none'">
+                <h1>⚡ Vostud AI Platform</h1>
+            </div>
             <div class="header-actions">
                 <span id="userDisplay" style="display: none; color: #aaa; display: flex; align-items: center; gap: 10px;">
                     <img id="userAvatar" src="" alt="Avatar" style="width: 32px; height: 32px; border-radius: 50%;">
@@ -967,6 +1001,9 @@
                         <button class="btn btn-primary" onclick="openGenerateKeyModal()">+ Generate API Key</button>
                         <button class="btn btn-secondary" onclick="switchTab('upload')">📄 Upload Document</button>
                         <button class="btn btn-secondary" onclick="switchTab('chat')">💬 Chat with AI</button>
+                        <!-- ===== SUPPORT & ADMIN BUTTONS ===== -->
+                        <button class="btn btn-support" onclick="window.location.href='/support'">💬 Support</button>
+                        <button class="btn btn-admin" id="adminBtn" style="display: none;" onclick="window.location.href='/adminpanel'">🛡️ Admin Panel</button>
                     </div>
                 </div>
 
@@ -1188,7 +1225,7 @@
                         <div style="margin-top: 10px;">
                             <div style="display: flex; justify-content: space-between; color: #888; font-size: 0.85em;">
                                 <span>Monthly Tokens</span>
-                                <span id="usageTokensText">0 / 100,000</span>
+                                <span id="usageTokensText">0 / 50,000</span>
                             </div>
                             <div class="usage-bar-container">
                                 <div class="usage-bar" id="usageBar" style="width: 0%;"></div>
@@ -1199,7 +1236,7 @@
                         <div style="margin-top: 15px;">
                             <div style="display: flex; justify-content: space-between; color: #888; font-size: 0.85em;">
                                 <span>Daily Requests</span>
-                                <span id="usageDailyText">0 / 500</span>
+                                <span id="usageDailyText">0 / 200</span>
                             </div>
                             <div class="usage-bar-container">
                                 <div class="usage-bar" id="usageDailyBar" style="width: 0%;"></div>
@@ -1278,11 +1315,15 @@
                         }
                         document.getElementById('userDisplay').style.display = 'flex';
                         
-                        // Update tier badge
                         const tier = currentUser.tier || 'free';
                         const tierBadge = document.getElementById('userTierBadge');
                         tierBadge.textContent = tier.toUpperCase();
                         tierBadge.className = `tier-badge tier-${tier}`;
+                        
+                        // Show admin button if user is admin
+                        if (tier === 'admin') {
+                            document.getElementById('adminBtn').style.display = 'inline-block';
+                        }
                         
                         showDashboard();
                         loadDashboardData();
@@ -1338,6 +1379,7 @@
                 document.getElementById('dashboard').style.display = 'none';
                 document.getElementById('logoutBtn').style.display = 'none';
                 document.getElementById('userDisplay').style.display = 'none';
+                document.getElementById('adminBtn').style.display = 'none';
                 showToast('Logged out successfully');
             });
         }
@@ -1358,6 +1400,7 @@
                     document.getElementById('dashboard').style.display = 'none';
                     document.getElementById('logoutBtn').style.display = 'none';
                     document.getElementById('userDisplay').style.display = 'none';
+                    document.getElementById('adminBtn').style.display = 'none';
                 }
             });
         }
@@ -1424,7 +1467,6 @@
                 return apiRequest(endpoint, method, body);
             }
 
-            // Handle rate limiting
             if (response.status === 429) {
                 const data = await response.json();
                 showToast(`⏳ ${data.detail || 'Rate limit exceeded. Please wait.'}`, 'error');
@@ -1443,13 +1485,20 @@
         // ============================================
         async function loadDashboardData() {
             try {
-                const stats = await apiRequest('/keys/stats');
-                document.getElementById('statKeys').textContent = stats.total_requests || 0;
-                document.getElementById('statRequests').textContent = stats.last_24h || 0;
+                // Get API keys count
+                const keysData = await apiRequest('/keys');
+                const keysCount = keysData ? keysData.length : 0;
+                document.getElementById('statKeys').textContent = keysCount;
 
+                // Get usage stats
+                const stats = await apiRequest('/keys/stats');
+                document.getElementById('statRequests').textContent = stats.total_requests || 0;
+
+                // Get document stats
                 const docStats = await apiRequest('/knowledge-stats');
                 document.getElementById('statDocs').textContent = docStats.total_documents || 0;
 
+                // Get models count
                 const models = await apiRequest('/models');
                 document.getElementById('statModels').textContent = models.available_models ? models.available_models.length : 0;
 
@@ -1752,7 +1801,8 @@
                     credentials: 'include',
                     body: JSON.stringify({
                         message: message,
-                        use_rag: true
+                        use_rag: true,
+                        model: 'auto'
                     })
                 });
 
@@ -1771,7 +1821,6 @@
                 }
                 chatBox.scrollTop = chatBox.scrollHeight;
                 
-                // Refresh usage after chat
                 if (document.getElementById('tab-usage').classList.contains('active')) {
                     loadUsageStats();
                 }
@@ -2100,27 +2149,28 @@
                 const response = await apiRequest('/usage');
                 const data = response;
                 
-                // Update tier
+                if (!data || !data.usage) {
+                    console.warn('No usage data received');
+                    return;
+                }
+                
                 const tier = data.tier || 'free';
                 document.getElementById('usageTier').textContent = tier.toUpperCase();
                 
-                // Update usage numbers
                 const monthlyTokens = data.usage?.monthly?.tokens_used || 0;
                 const dailyRequests = data.usage?.daily?.requests || 0;
-                const monthlyLimit = data.limits?.tokens_per_month || 100000;
-                const dailyLimit = data.limits?.requests_per_day || 500;
+                const monthlyLimit = data.limits?.tokens_per_month || 50000;
+                const dailyLimit = data.limits?.requests_per_day || 200;
                 
                 document.getElementById('usageTokens').textContent = monthlyTokens.toLocaleString();
                 document.getElementById('usageRequests').textContent = dailyRequests;
                 
-                // Calculate percentages
                 const tokenPercent = Math.min((monthlyTokens / monthlyLimit) * 100, 100);
                 const requestPercent = Math.min((dailyRequests / dailyLimit) * 100, 100);
                 const remaining = Math.max(100 - tokenPercent, 0);
                 
                 document.getElementById('usageRemaining').textContent = remaining.toFixed(0) + '%';
                 
-                // Update bars
                 document.getElementById('usageBar').style.width = tokenPercent + '%';
                 document.getElementById('usageTokensText').textContent = `${monthlyTokens.toLocaleString()} / ${monthlyLimit.toLocaleString()}`;
                 document.getElementById('usagePercentText').textContent = tokenPercent.toFixed(1) + '% used';
