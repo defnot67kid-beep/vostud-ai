@@ -512,7 +512,10 @@ async def admin_appeals(auth: dict = Depends(require_api_key_or_oauth)):
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     
-    appeals = list(db.suspension_appeals.find().sort("created_at", -1))
+    try:
+        appeals = list(db.suspension_appeals.find().sort("created_at", -1))
+    except Exception as e:
+        return {"appeals": []}
     
     for appeal in appeals:
         appeal["_id"] = str(appeal["_id"])
@@ -520,7 +523,7 @@ async def admin_appeals(auth: dict = Depends(require_api_key_or_oauth)):
     return {"appeals": appeals}
 
 # ============================================
-# SUPPORT API ROUTES (FIXED - Works with OAuth Cookie)
+# SUPPORT API ROUTES
 # ============================================
 
 @app.get("/api/support")
@@ -1527,16 +1530,21 @@ async def get_appeal_status(
     
     user_id = auth.get("user_id") or auth.get("sub")
     if not user_id:
-        raise HTTPException(status_code=400, detail="User ID not found")
+        raise HTTPException(status_code=401, detail="User ID not found")
     
     from bson import ObjectId
-    appeal = db.suspension_appeals.find_one({
-        "user_id": user_id
-    }).sort("created_at", -1)
     
-    if not appeal:
+    # Find appeals for this user
+    try:
+        appeals = list(db.suspension_appeals.find({"user_id": user_id}).sort("created_at", -1))
+    except Exception as e:
+        # If collection doesn't exist or has no data
         return {"status": "no_appeal", "message": "No appeal found"}
     
+    if not appeals:
+        return {"status": "no_appeal", "message": "No appeal found"}
+    
+    appeal = appeals[0]
     appeal["_id"] = str(appeal["_id"])
     return appeal
 
@@ -1593,7 +1601,10 @@ async def get_pending_appeals(
     if not db:
         raise HTTPException(status_code=503, detail="Database not available")
     
-    appeals = list(db.suspension_appeals.find({"status": "pending"}).sort("created_at", 1))
+    try:
+        appeals = list(db.suspension_appeals.find({"status": "pending"}).sort("created_at", 1))
+    except Exception as e:
+        return {"appeals": []}
     
     for appeal in appeals:
         appeal["_id"] = str(appeal["_id"])
