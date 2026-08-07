@@ -42,9 +42,8 @@
         }
         .btn:hover { transform: translateY(-2px); }
         .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
-        .btn-danger { background: rgba(248,113,113,0.2); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
-        .btn-success { background: rgba(74,222,128,0.2); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
         .btn-secondary { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.1); }
+        .btn-support { background: rgba(74,222,128,0.2); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
         .card {
             background: rgba(255,255,255,0.05);
             border-radius: 12px;
@@ -120,6 +119,25 @@
             animation: spin 1s ease-in-out infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .login-prompt {
+            color: #fbbf24;
+            padding: 30px;
+            text-align: center;
+        }
+        .login-prompt a { color: #667eea; text-decoration: none; }
+        .login-prompt a:hover { text-decoration: underline; }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #888;
+        }
+        .user-info .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.1);
+        }
         @media (max-width: 768px) {
             .header { flex-direction: column; align-items: flex-start; }
             table { font-size: 0.75em; }
@@ -129,42 +147,63 @@
 </head>
 <body>
     <div class="container">
+        <!-- Header -->
         <div class="header">
             <h1>💬 Vostud AI Support</h1>
             <div class="header-actions">
-                <span id="userDisplay" style="color: #888; font-size: 0.9em;"></span>
-                <button class="btn btn-secondary" onclick="logout()">Logout</button>
+                <div id="userDisplay" class="user-info" style="display: none;">
+                    <img id="userAvatar" class="avatar" src="" alt="">
+                    <span id="usernameDisplay"></span>
+                </div>
+                <button class="btn btn-secondary" id="logoutBtn" style="display: none;" onclick="logout()">Logout</button>
                 <a href="/platform" class="btn btn-secondary">Dashboard</a>
             </div>
         </div>
 
-        <div class="card">
-            <h3>📝 Create Support Ticket</h3>
-            <div class="flex" style="flex-direction: column; gap: 10px;">
-                <input type="text" id="ticketSubject" placeholder="Subject">
-                <select id="ticketCategory">
-                    <option value="general">General</option>
-                    <option value="suspension">Suspension Appeal</option>
-                    <option value="billing">Billing</option>
-                    <option value="technical">Technical Issue</option>
-                    <option value="feature">Feature Request</option>
-                </select>
-                <textarea id="ticketMessage" placeholder="Describe your issue..."></textarea>
-                <button class="btn btn-primary" onclick="createTicket()">Submit Ticket</button>
+        <!-- Support Content -->
+        <div id="supportContent">
+            <!-- Login Prompt (shown when not logged in) -->
+            <div id="loginPrompt" class="card">
+                <div class="login-prompt">
+                    <p style="font-size: 1.2em;">🔑 Please login to access support</p>
+                    <p style="margin-top: 10px;"><a href="/platform">Go to Platform</a> to login</p>
+                </div>
             </div>
-        </div>
 
-        <div class="card">
-            <div class="flex" style="margin-bottom: 15px;">
-                <h3 style="margin: 0;">📋 Your Tickets</h3>
-                <button class="btn btn-secondary" onclick="loadTickets()">🔄 Refresh</button>
+            <!-- Support Dashboard (shown when logged in) -->
+            <div id="supportDashboard" style="display: none;">
+                <!-- Create Ticket -->
+                <div class="card">
+                    <h3>📝 Create Support Ticket</h3>
+                    <div class="flex" style="flex-direction: column; gap: 10px;">
+                        <input type="text" id="ticketSubject" placeholder="Subject">
+                        <select id="ticketCategory">
+                            <option value="general">General</option>
+                            <option value="suspension">Suspension Appeal</option>
+                            <option value="billing">Billing</option>
+                            <option value="technical">Technical Issue</option>
+                            <option value="feature">Feature Request</option>
+                        </select>
+                        <textarea id="ticketMessage" placeholder="Describe your issue..."></textarea>
+                        <button class="btn btn-primary" onclick="createTicket()">Submit Ticket</button>
+                    </div>
+                </div>
+
+                <!-- Tickets List -->
+                <div class="card">
+                    <div class="flex" style="margin-bottom: 15px;">
+                        <h3 style="margin: 0;">📋 Your Tickets</h3>
+                        <button class="btn btn-secondary" onclick="loadTickets()">🔄 Refresh</button>
+                    </div>
+                    <div id="ticketsTableContainer"><div class="loading">Loading tickets...</div></div>
+                </div>
+
+                <!-- Appeal Status -->
+                <div class="card">
+                    <h3>📝 Appeal Status</h3>
+                    <div id="appealStatus">Loading appeal status...</div>
+                </div>
             </div>
-            <div id="ticketsTableContainer"><div class="loading">Loading tickets...</div></div>
-        </div>
-
-        <div class="card">
-            <h3>📝 Appeal Status</h3>
-            <div id="appealStatus">Loading appeal status...</div>
         </div>
     </div>
 
@@ -186,41 +225,40 @@
         }
 
         // ============================================
-        // FIX: Use cookie-based authentication (no manual API key needed)
+        // API REQUEST (Supports both cookie and API key)
         // ============================================
         async function apiRequest(endpoint, method = 'GET', body = null) {
+            // Check for API key in localStorage
+            const apiKey = localStorage.getItem('vostud_api_key');
+            
+            const headers = { 'Content-Type': 'application/json' };
+            if (apiKey) {
+                headers['X-API-Key'] = apiKey;
+            }
+
             const options = {
                 method,
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include'  // <-- This sends the cookie automatically!
+                headers,
+                credentials: 'include'  // Sends cookie for OAuth
             };
             if (body) options.body = JSON.stringify(body);
 
             const response = await fetch(`${API_URL}${endpoint}`, options);
 
-            // If unauthorized, try to refresh
             if (response.status === 401 || response.status === 403) {
-                // Try to check if user is logged in via cookie
+                // Try to refresh OAuth session
                 try {
                     const meResponse = await fetch(`${API_URL}/auth/me`, {
                         credentials: 'include'
                     });
                     if (meResponse.ok) {
-                        // User is logged in, retry the request
+                        // Retry with fresh cookie
                         return apiRequest(endpoint, method, body);
                     }
                 } catch (e) {}
 
                 isAuthenticated = false;
-                showToast('Please login to continue.', 'error');
-                document.getElementById('userDisplay').textContent = '🔒 Not logged in';
-                document.getElementById('ticketsTableContainer').innerHTML = `
-                    <div style="color: #fbbf24; padding: 30px; text-align: center;">
-                        <p style="font-size: 1.2em;">🔑 Please login to access support</p>
-                        <p style="margin-top: 10px;"><a href="/platform" style="color: #667eea;">Go to Platform</a> to login</p>
-                    </div>
-                `;
-                document.getElementById('appealStatus').innerHTML = '<div style="color: #888;">Login to check appeal status</div>';
+                showLoginPrompt();
                 return null;
             }
 
@@ -233,6 +271,26 @@
             return response.json();
         }
 
+        // ============================================
+        // SHOW/HIDE LOGIN PROMPT
+        // ============================================
+        function showLoginPrompt() {
+            document.getElementById('loginPrompt').style.display = 'block';
+            document.getElementById('supportDashboard').style.display = 'none';
+            document.getElementById('userDisplay').style.display = 'none';
+            document.getElementById('logoutBtn').style.display = 'none';
+        }
+
+        function showDashboard() {
+            document.getElementById('loginPrompt').style.display = 'none';
+            document.getElementById('supportDashboard').style.display = 'block';
+            document.getElementById('userDisplay').style.display = 'flex';
+            document.getElementById('logoutBtn').style.display = 'inline-block';
+        }
+
+        // ============================================
+        // CREATE TICKET
+        // ============================================
         async function createTicket() {
             const subject = document.getElementById('ticketSubject').value.trim();
             const category = document.getElementById('ticketCategory').value;
@@ -259,6 +317,9 @@
             }
         }
 
+        // ============================================
+        // LOAD TICKETS
+        // ============================================
         async function loadTickets() {
             try {
                 const data = await apiRequest('/api/support');
@@ -299,6 +360,9 @@
             }
         }
 
+        // ============================================
+        // VIEW TICKET
+        // ============================================
         async function viewTicket(ticketId) {
             try {
                 const data = await apiRequest(`/api/support/ticket/${ticketId}`);
@@ -323,6 +387,9 @@
             }
         }
 
+        // ============================================
+        // LOAD APPEAL STATUS
+        // ============================================
         async function loadAppealStatus() {
             try {
                 const data = await apiRequest('/support/appeal');
@@ -348,19 +415,26 @@
             }
         }
 
+        // ============================================
+        // LOGOUT
+        // ============================================
         function logout() {
-            // Clear localStorage
             localStorage.removeItem('vostud_api_key');
-            // Clear cookies
             document.cookie = 'access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
             window.location.href = '/platform';
         }
 
+        // ============================================
+        // INITIALIZATION
+        // ============================================
         async function init() {
-            // Check if user is logged in via cookie
+            // Check if user is logged in via cookie or API key
             try {
                 const meResponse = await fetch(`${API_URL}/auth/me`, {
-                    credentials: 'include'
+                    credentials: 'include',
+                    headers: {
+                        'X-API-Key': localStorage.getItem('vostud_api_key') || ''
+                    }
                 });
 
                 if (meResponse.ok) {
@@ -368,24 +442,25 @@
                     if (data.authenticated) {
                         currentUser = data.user;
                         isAuthenticated = true;
-                        document.getElementById('userDisplay').textContent = `👤 ${currentUser?.email || currentUser?.name || 'User'}`;
+                        
+                        // Update user display
+                        document.getElementById('usernameDisplay').textContent = currentUser?.email || currentUser?.name || 'User';
+                        if (currentUser?.picture) {
+                            document.getElementById('userAvatar').src = currentUser.picture;
+                        }
+                        
+                        showDashboard();
                         await loadTickets();
                         await loadAppealStatus();
                         return;
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.log('Auth check error:', e);
+            }
 
-            // Not logged in
-            isAuthenticated = false;
-            document.getElementById('userDisplay').textContent = '🔒 Not logged in';
-            document.getElementById('ticketsTableContainer').innerHTML = `
-                <div style="color: #fbbf24; padding: 30px; text-align: center;">
-                    <p style="font-size: 1.2em;">🔑 Please login to access support</p>
-                    <p style="margin-top: 10px;"><a href="/platform" style="color: #667eea;">Go to Platform</a> to login</p>
-                </div>
-            `;
-            document.getElementById('appealStatus').innerHTML = '<div style="color: #888;">Login to check appeal status</div>';
+            // Not logged in - show login prompt
+            showLoginPrompt();
         }
 
         // Run init when page loads
