@@ -2596,48 +2596,49 @@
         // ============================================
         // USAGE STATS
         // ============================================
-        async function loadUsageStats() {
-            if (document.getElementById('suspensionOverlay').classList.contains('active')) return;
-            
-            try {
-                const response = await apiRequest('/usage');
-                const data = response;
-                
-                if (!data || !data.usage) {
-                    console.warn('No usage data received');
-                    return;
-                }
-                
-                const tier = data.tier || 'free';
-                document.getElementById('usageTier').textContent = tier.toUpperCase();
-                
-                const monthlyTokens = data.usage?.monthly?.tokens_used || 0;
-                const dailyRequests = data.usage?.daily?.requests || 0;
-                const monthlyLimit = data.limits?.tokens_per_month || 50000;
-                const dailyLimit = data.limits?.requests_per_day || 200;
-                
-                document.getElementById('usageTokens').textContent = monthlyTokens.toLocaleString();
-                document.getElementById('usageRequests').textContent = dailyRequests;
-                
-                const tokenPercent = Math.min((monthlyTokens / monthlyLimit) * 100, 100);
-                const requestPercent = Math.min((dailyRequests / dailyLimit) * 100, 100);
-                const remaining = Math.max(100 - tokenPercent, 0);
-                
-                document.getElementById('usageRemaining').textContent = remaining.toFixed(0) + '%';
-                
-                document.getElementById('usageBar').style.width = tokenPercent + '%';
-                document.getElementById('usageTokensText').textContent = `${monthlyTokens.toLocaleString()} / ${monthlyLimit.toLocaleString()}`;
-                document.getElementById('usagePercentText').textContent = tokenPercent.toFixed(1) + '% used';
-                
-                document.getElementById('usageDailyBar').style.width = requestPercent + '%';
-                document.getElementById('usageDailyText').textContent = `${dailyRequests} / ${dailyLimit}`;
-                document.getElementById('usageDailyPercent').textContent = requestPercent.toFixed(1) + '% used';
-                
-            } catch (error) {
-                console.error('Failed to load usage stats:', error);
-                document.getElementById('usageTokens').textContent = 'Error';
-            }
+async function loadUsageStats() {
+    try {
+        const response = await apiRequest('/usage');
+        const data = response;
+        
+        if (!data || !data.usage) {
+            console.warn('No usage data received');
+            return;
         }
+        
+        const tier = data.tier || 'free';
+        document.getElementById('usageTier').textContent = tier.toUpperCase();
+        
+        // Use token_balance from the monthly usage
+        const monthlyTokens = data.usage?.monthly?.tokens_used || 0;
+        const dailyRequests = data.usage?.daily?.requests || 0;
+        const monthlyLimit = data.limits?.tokens_per_month || 50000;
+        const dailyLimit = data.limits?.requests_per_day || 200;
+        
+        document.getElementById('usageTokens').textContent = monthlyTokens.toLocaleString();
+        document.getElementById('usageRequests').textContent = dailyRequests;
+        
+        // Calculate percentages
+        const tokenPercent = Math.min((monthlyTokens / monthlyLimit) * 100, 100);
+        const requestPercent = Math.min((dailyRequests / dailyLimit) * 100, 100);
+        const remaining = Math.max(100 - tokenPercent, 0);
+        
+        document.getElementById('usageRemaining').textContent = remaining.toFixed(0) + '%';
+        
+        // Update bars
+        document.getElementById('usageBar').style.width = tokenPercent + '%';
+        document.getElementById('usageTokensText').textContent = `${monthlyTokens.toLocaleString()} / ${monthlyLimit.toLocaleString()}`;
+        document.getElementById('usagePercentText').textContent = tokenPercent.toFixed(1) + '% used';
+        
+        document.getElementById('usageDailyBar').style.width = requestPercent + '%';
+        document.getElementById('usageDailyText').textContent = `${dailyRequests} / ${dailyLimit}`;
+        document.getElementById('usageDailyPercent').textContent = requestPercent.toFixed(1) + '% used';
+        
+    } catch (error) {
+        console.error('Failed to load usage stats:', error);
+        document.getElementById('usageTokens').textContent = 'Error';
+    }
+}
 
         // ============================================
         // INITIALIZATION
