@@ -27,6 +27,7 @@ class Database:
             self.sync_client = MongoClient(self.mongo_uri)
             self.db = self.sync_client[self.db_name]
             
+            # Collections
             self.api_keys = self.db["api_keys"]
             self.usage_logs = self.db["usage_logs"]
             self.users = self.db["users"]
@@ -45,30 +46,36 @@ class Database:
     def _create_indexes(self):
         """Create necessary indexes for performance"""
         try:
+            # API Keys indexes
             self.api_keys.create_index("key", unique=True)
             self.api_keys.create_index("user_id")
             self.api_keys.create_index("status")
             self.api_keys.create_index("expires_at")
             
+            # Usage logs indexes
             self.usage_logs.create_index("api_key")
             self.usage_logs.create_index("timestamp")
             self.usage_logs.create_index("user_id")
             self.usage_logs.create_index("model_used")
             self.usage_logs.create_index("api_used")
             
+            # Users indexes
             self.users.create_index("email", unique=True)
             self.users.create_index("username", unique=True)
             self.users.create_index("auth_provider")
             self.users.create_index("suspension_status")
             
+            # Illegal activity logs indexes
             self.illegal_activity_logs.create_index("user_id")
             self.illegal_activity_logs.create_index("timestamp")
             self.illegal_activity_logs.create_index("severity")
             
+            # Support tickets indexes
             self.support_tickets.create_index("user_id")
             self.support_tickets.create_index("status")
             self.support_tickets.create_index("created_at")
             
+            # Suspension appeals indexes
             self.suspension_appeals.create_index("user_id")
             self.suspension_appeals.create_index("status")
             self.suspension_appeals.create_index("created_at")
@@ -173,13 +180,16 @@ class Database:
                   cost: float = 0.0):
         """Log API usage for tracking"""
         try:
+            # Count usage for API key
             if api_key:
                 hashed_key = self.hash_api_key(api_key)
+                # Increment usage_count on the API key
                 self.api_keys.update_one(
                     {"key": hashed_key},
                     {"$inc": {"usage_count": 1}}
                 )
             
+            # Insert usage log
             usage_doc = {
                 "user_id": user_id,
                 "timestamp": datetime.utcnow(),
@@ -198,8 +208,97 @@ class Database:
             
             self.usage_logs.insert_one(usage_doc)
             
+            logger.info(f"📊 Usage logged: {user_id} - {endpoint} - {tokens_used} tokens")
+            
         except Exception as e:
             logger.error(f"❌ Log usage error: {e}")
+    
+    def get_key_stats(self, user_id: str) -> dict:
+        """Get API key statistics for a user"""
+        try:
+            keys = list(self.api_keys.find({"user_id": user_id}))
+            
+            total_keys = len(keys)
+            active_keys = sum(1 for k in keys if k.get("status") == "active")
+            total_usage = sum(k.get("usage_count", 0) for k in keys)
+            
+            return {
+                "total_keys": total_keys,
+                "active_keys": active_keys,
+                "total_usage": total_usage,
+                "keys": [{
+                    "key_prefix": k.get("key_prefix"),
+                    "name": k.get("name"),
+                    "status": k.get("status"),
+                    "usage_count": k.get("usage_count", 0)
+                } for k in keys]
+            }
+        except Exception as e:
+            logger.error(f"❌ Get key stats error: {e}")
+            return {"total_keys": 0, "active_keys": 0, "total_usage": 0, "keys": []}
+    
+    def revoke_api_key(self, api_key: str) -> bool:
+        """Revoke an API key"""
+        try:
+            hashed_key = self.hash_api_key(api_key)
+            result = self.api_keys.update_one(
+                {"key": hashed_key},
+                {"$set": {"status": "revoked"}}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f"❌ Revoke API key error: {e}")
+            return False
+    
+    def get_key_info(self, api_key: str) -> dict:
+        """Get information about an API key"""
+        try:
+            hashed_key = self.hash_api_key(api_key)
+            key_doc = self.api_keys.find_one({"key": hashed_key})
+            
+            if not key_doc:
+                return None
+            
+            return {
+                "user_id": key_doc.get("user_id"),
+                "name": key_doc.get("name"),
+                "status": key_doc.get("status"),
+                "created_at": key_doc.get("created_at"),
+                "expires_at": key_doc.get("expires_at"),
+                "last_used": key_doc.get("last_used"),
+                "usage_count": key_doc.get("usage_count", 0),
+                "rate_limit": key_doc.get("rate_limit", 1000)
+            }
+        except Exception as e:
+            logger.error(f"❌ Get key info error: {e}")
+            return None
+    
+    def create_user(self, email: str, username: str, password: str = None):
+        """Create a new user"""
+        try:
+            from passlib.hash import bcrypt
+            
+            user_doc = {
+                "email": email,
+                "username": username,
+                "display_name": username,
+                "created_at": datetime.utcnow(),
+                "auth_provider": "email",
+                "api_keys": [],
+                "settings": {
+                    "default_model": "auto",
+                    "notifications": True
+                }
+            }
+            
+            if password:
+                user_doc["password_hash"] = bcrypt.hash(password)
+            
+            self.users.insert_one(user_doc)
+            return user_doc
+        except Exception as e:
+            logger.error(f"❌ Create user error: {e}")
+            return None
     
     def suspend_user(self, user_id: str, reason: str, severity: str = "high", patterns: list = None) -> bool:
         """Suspend a user account"""
