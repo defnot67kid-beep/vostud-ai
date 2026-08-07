@@ -886,6 +886,15 @@ async def get_usage_stats(auth: dict = Depends(require_api_key_or_oauth)):
         if not user_id:
             raise HTTPException(status_code=400, detail="User ID not found")
         
+        # Get user to check token_balance
+        from bson import ObjectId
+        try:
+            user = db.users.find_one({"_id": ObjectId(user_id)})
+        except:
+            user = db.users.find_one({"_id": user_id})
+        
+        token_balance = user.get("token_balance", 0) if user else 0
+        
         summary = db.get_user_usage_summary(user_id)
         
         return {
@@ -893,13 +902,12 @@ async def get_usage_stats(auth: dict = Depends(require_api_key_or_oauth)):
             "last_24h": summary.get("last_24h", 0),
             "total_keys": summary.get("total_keys", 0),
             "active_keys": summary.get("active_keys", 0),
-            "total_tokens": summary.get("total_tokens", 0),
+            "total_tokens": token_balance,  # <-- Use token_balance from user
             "suspended": summary.get("suspended", False)
         }
     except Exception as e:
         logger.error(f"❌ Stats error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
-
 # ============================================
 # CHAT ENDPOINTS
 # ============================================
@@ -1390,13 +1398,25 @@ async def get_analytics_details(
 
 @app.get("/usage")
 async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
+    """Get token usage for the user"""
     user_id = auth.get("user_id") or auth.get("sub")
     if not user_id:
         raise HTTPException(status_code=400, detail="User ID not found")
     
     tier = auth.get("tier", "free")
     
-    if db:
+    # Get user from database to check token_balance
+    from bson import ObjectId
+    try:
+        user = db.users.find_one({"_id": ObjectId(user_id)})
+    except:
+        user = db.users.find_one({"_id": user_id})
+    
+    if user:
+        # Use token_balance from user document if it exists
+        token_balance = user.get("token_balance", 0)
+        
+        # Also track usage from logs for comparison
         cutoff_date = datetime.utcnow() - timedelta(days=30)
         pipeline = [
             {"$match": {
@@ -1414,18 +1434,25 @@ async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
         monthly_tokens = result[0].get("tokens_used", 0) if result else 0
         monthly_requests = result[0].get("requests", 0) if result else 0
         
+        # Daily usage
         cutoff_daily = datetime.utcnow() - timedelta(days=1)
         daily_requests = db.usage_logs.count_documents({
             "user_id": user_id,
             "timestamp": {"$gte": cutoff_daily}
         })
         
+        # Use token_balance for the monthly display
+        monthly_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get("tokens_per_month", 50000)
+        
         return {
             "tier": tier,
-            "limits": TIER_LIMITS.get(tier, TIER_LIMITS["free"]),
+            "limits": {
+                "tokens_per_month": monthly_limit,
+                "requests_per_day": TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get("requests_per_day", 200)
+            },
             "usage": {
                 "monthly": {
-                    "tokens_used": monthly_tokens,
+                    "tokens_used": token_balance,  # <-- Use token_balance from user document
                     "requests": monthly_requests
                 },
                 "daily": {
@@ -1434,6 +1461,7 @@ async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
             }
         }
     
+    # Fallback to original method if user not found
     usage = await token_tracker.get_usage(user_id, "month")
     daily_usage = await token_tracker.get_usage(user_id, "day")
     return {
@@ -1444,7 +1472,6 @@ async def get_usage(auth: dict = Depends(require_api_key_or_oauth)):
             "daily": daily_usage
         }
     }
-
 @app.get("/usage/check")
 async def check_usage(auth: dict = Depends(require_api_key_or_oauth)):
     user_id = auth.get("user_id") or auth.get("sub")
